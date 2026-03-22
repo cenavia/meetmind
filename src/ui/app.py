@@ -182,7 +182,7 @@ def create_ui():
             fn=process_dispatch,
             inputs=[text_input, file_input],
             outputs=[output],
-            show_progress=True,
+            show_progress=True,  # Loader visible durante procesamiento (US-004); errores ocultan loader y muestran mensaje
         )
 
     return demo
