@@ -10,6 +10,7 @@ Auto-generated from all feature plans. Last updated: 2026-03-21
 
 ## Active Technologies
 - N/A (no persistencia de archivos; se procesan en memoria) (002-text-notes-processing)
+- N/A (sin persistencia para esta feature) (003-participants-extraction)
 
 - Python 3.11+ + FastAPI, Gradio, LangGraph, LangChain (langchain-core), uv (gestor) (001-hello-world-e2e)
 
@@ -29,6 +30,7 @@ cd src [ONLY COMMANDS FOR ACTIVE TECHNOLOGIES][ONLY COMMANDS FOR ACTIVE TECHNOLO
 Python 3.11+: Follow standard conventions
 
 ## Recent Changes
+- 003-participants-extraction: Added Python 3.11+ + FastAPI, Gradio, LangGraph, LangChain (langchain-core), uv
 - 002-text-notes-processing: Added Python 3.11+ + FastAPI, Gradio, LangGraph, LangChain (langchain-core), uv
 
 - 001-hello-world-e2e: Added Python 3.11+ + FastAPI, Gradio, LangGraph, LangChain (langchain-core), uv (gestor)
