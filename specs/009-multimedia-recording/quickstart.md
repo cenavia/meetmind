@@ -72,6 +72,15 @@ curl -X POST "http://localhost:8000/api/v1/process/file" \
   -F "file=@reunion.mp4"
 ```
 
+### Progreso real (SSE)
+
+La UI Gradio consume `POST /api/v1/process/file/stream` (y `POST /api/v1/process/text/stream` para texto), que devuelve **Server-Sent Events** con fases reales del servidor (`received` → `transcribing` → `analyzing` → `complete` o `error`).
+
+```bash
+curl -N -X POST "http://localhost:8000/api/v1/process/file/stream" \
+  -F "file=@reunion.mp3"
+```
+
 ### Respuesta esperada (200 OK)
 
 ```json

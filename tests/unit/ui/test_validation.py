@@ -9,6 +9,7 @@ from src.ui.utils import (
     MSG_ARCHIVO_DEMASIADO_GRANDE,
     MSG_FORMATO_NO_SOPORTADO,
     get_mime_for_extension,
+    is_multimedia_path,
     validate_file,
     validate_file_extension,
     validate_file_size,
@@ -92,6 +93,22 @@ class TestValidateFile:
         f = tmp_path / "malware.exe"
         f.write_text("x")
         assert validate_file(f) == MSG_FORMATO_NO_SOPORTADO
+
+
+class TestIsMultimediaPath:
+    def test_audio_video_extensions(self, tmp_path):
+        """Extensiones multimedia devuelven True."""
+        for ext in [".mp3", ".wav", ".m4a", ".mp4", ".mov"]:
+            p = tmp_path / f"a{ext}"
+            p.write_bytes(b"x")
+            assert is_multimedia_path(p) is True
+
+    def test_text_extensions(self, tmp_path):
+        """TXT y MD no son multimedia."""
+        for ext in [".txt", ".md"]:
+            p = tmp_path / f"a{ext}"
+            p.write_text("hola")
+            assert is_multimedia_path(p) is False
 
 
 class TestGetMimeForExtension:

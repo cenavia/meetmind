@@ -9,8 +9,9 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
+from starlette.responses import StreamingResponse
 
-from src.agents.meeting.agent import get_graph
+from src.api.process_file_stream import stream_process_text_request, stream_process_uploaded_file
 from src.api.dependencies import get_graph_dep
 from src.api.multimedia_validation import (
     MSG_FORMAT_UNSUPPORTED,
@@ -181,3 +182,49 @@ async def process_file(
         )
 
     raise HTTPException(status_code=415, detail=MSG_FORMAT_UNSUPPORTED)
+
+
+_SSE_HEADERS = {
+    "Cache-Control": "no-cache",
+    "Connection": "keep-alive",
+    "X-Accel-Buffering": "no",
+}
+
+
+@router.post("/file/stream")
+async def process_file_stream(
+    file: Annotated[
+        UploadFile,
+        File(description="Archivo .txt, .md o multimedia (streaming SSE con fases)"),
+    ],
+    graph=Depends(get_graph_dep),
+):
+    """
+    Igual que POST /file pero devuelve **text/event-stream** (SSE).
+
+    Eventos JSON en cada línea `data:`:
+    - `{"type":"phase","phase":"received|transcribing|analyzing|text_loaded","message":"..."}`
+    - `{"type":"complete","data":{...}}` (mismo shape que ProcessMeetingResponse)
+    - `{"type":"error","status":4xx,"detail":"..."}`
+    """
+    content = await file.read()
+    filename = file.filename or ""
+    ct = file.content_type
+    return StreamingResponse(
+        stream_process_uploaded_file(content, filename, ct, graph),
+        media_type="text/event-stream",
+        headers=_SSE_HEADERS,
+    )
+
+
+@router.post("/text/stream")
+async def process_text_stream(
+    body: ProcessTextRequest,
+    graph=Depends(get_graph_dep),
+):
+    """Procesa texto con SSE (fase analyzing + complete o error)."""
+    return StreamingResponse(
+        stream_process_text_request(body.text, graph),
+        media_type="text/event-stream",
+        headers=_SSE_HEADERS,
+    )

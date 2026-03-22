@@ -5,6 +5,7 @@ from pathlib import Path
 ALLOWED_EXTENSIONS = frozenset(
     {".mp4", ".mov", ".mp3", ".wav", ".m4a", ".txt", ".md"}
 )
+MULTIMEDIA_EXTENSIONS = frozenset({".mp4", ".mov", ".mp3", ".wav", ".m4a"})
 MAX_FILE_SIZE_BYTES = 500 * 1024 * 1024  # 500 MB
 
 MSG_FORMATO_NO_SOPORTADO = (
@@ -40,6 +41,12 @@ def validate_file_size(path: str | Path) -> str | None:
     if size > MAX_FILE_SIZE_BYTES:
         return MSG_ARCHIVO_DEMASIADO_GRANDE
     return None
+
+
+def is_multimedia_path(path: str | Path) -> bool:
+    """True si el archivo se trata como audio/video (transcripción + análisis)."""
+    ext = Path(path).suffix.lower()
+    return ext in MULTIMEDIA_EXTENSIONS
 
 
 def validate_file(path: str | Path) -> str | None:
