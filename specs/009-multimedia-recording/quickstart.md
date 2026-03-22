@@ -8,7 +8,11 @@
 - [uv](https://docs.astral.sh/uv/) instalado
 - **ffmpeg** instalado en el sistema (requerido por Whisper para audio/video)
 
-### Instalar ffmpeg
+### ffmpeg (video → audio)
+
+El proyecto incluye **`imageio-ffmpeg`**: al hacer `uv sync` se descarga un **ffmpeg portable** usado si no hay ffmpeg en el PATH. Así puedes procesar vídeo **sin** depender de `brew`/`apt` ni de la nube para extraer el audio.
+
+Opcionalmente puedes instalar ffmpeg en el sistema (se prioriza sobre el empaquetado):
 
 ```bash
 # macOS (Homebrew)

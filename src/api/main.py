@@ -25,12 +25,19 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from src.api.routers import health, process
 from src.config import get_transcription_mode_label
+from src.services.ffmpeg_exec import prepend_ffmpeg_to_os_path, resolve_ffmpeg_executable
 
 logger = logging.getLogger("meetmind.api")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    prepend_ffmpeg_to_os_path()
+    ff = resolve_ffmpeg_executable()
+    if ff:
+        logger.info("ffmpeg disponible: %s", ff)
+    else:
+        logger.warning("ffmpeg no encontrado: el video puede fallar hasta instalar dependencias o ffmpeg en el sistema")
     logger.info("Transcripción multimedia: %s", get_transcription_mode_label())
     yield
 

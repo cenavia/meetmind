@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import logging
 import os
-import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -25,6 +24,7 @@ from src.config import (
     get_transcription_model,
     get_whisper_device,
 )
+from src.services.ffmpeg_exec import prepend_ffmpeg_to_os_path, resolve_ffmpeg_executable
 
 
 class TranscriptionError(Exception):
@@ -83,11 +83,13 @@ def _is_video_ext(path: str | Path) -> bool:
 
 
 def _extract_audio_from_video(video_path: Path) -> Path:
-    """Extrae pista de audio de video a WAV temporal. Requiere ffmpeg."""
-    if not shutil.which("ffmpeg"):
+    """Extrae pista de audio de video a WAV temporal. Usa ffmpeg del sistema o imageio-ffmpeg."""
+    prepend_ffmpeg_to_os_path()
+    ffmpeg_bin = resolve_ffmpeg_executable()
+    if not ffmpeg_bin:
         msg = (
-            "Para procesar archivos de video (MP4, MOV, WEBM, MKV) necesitas ffmpeg. "
-            "Instálalo con: brew install ffmpeg"
+            "Para procesar archivos de video (MP4, MOV, WEBM, MKV) hace falta ffmpeg. "
+            "Instala dependencias del proyecto (incluye imageio-ffmpeg) o instala ffmpeg en el sistema."
         )
         logger.warning("ffmpeg no encontrado: no se puede procesar video")
         raise TranscriptionError(msg)
@@ -96,7 +98,7 @@ def _extract_audio_from_video(video_path: Path) -> Path:
         os.close(fd)
         result = subprocess.run(
             [
-                "ffmpeg",
+                ffmpeg_bin,
                 "-y",
                 "-i",
                 str(video_path),
@@ -240,6 +242,9 @@ def transcribe_audio(
     path = Path(audio_path)
     if not path.exists():
         raise TranscriptionError("No se pudo procesar el archivo. Verifica que no esté dañado.")
+
+    # Whisper puede llamar a `ffmpeg` por nombre para algunos formatos
+    prepend_ffmpeg_to_os_path()
 
     temp_wav: Path | None = None
     try:

@@ -16,6 +16,7 @@ dependencies = [
     "langchain-openai",
     "openai>=1.40.0",
     "openai-whisper",
+    "imageio-ffmpeg>=0.5.0",
 ]
 
 [project.optional-dependencies]
