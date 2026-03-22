@@ -4,7 +4,8 @@
 > Proyecto: **MeetMind**  
 > Fecha: 2025-03-21  
 > Versión: 1.0  
-> Estado: Borrador inicial
+> Estado: Borrador inicial  
+> Referencia: [ARQUITECTURA-Sistema-Procesamiento-Reuniones.md](./ARQUITECTURA-Sistema-Procesamiento-Reuniones.md)
 
 ---
 
@@ -52,14 +53,24 @@
 
 **MeetMind** es un sistema de procesamiento automático que ingiere grabaciones de reuniones (audio/video) o notas en texto, y genera documentación empresarial formal mediante un workflow orquestado con LangGraph. Utiliza modelos de lenguaje para extracción de información y generación de artefactos estructurados.
 
-### 2.2 ¿Para quién?
+### 2.2 Arquitectura de tres capas
+
+El sistema se organiza en **tres capas** desacopladas:
+
+| Capa | Tecnología | Responsabilidad |
+|------|------------|-----------------|
+| **Presentación** | Gradio | Interfaz de usuario para carga de archivos, historial de reuniones y visualización de resultados |
+| **API** | FastAPI | API REST para orquestar solicitudes, validar entradas y servir el workflow |
+| **Negocio** | LangGraph + LangChain | Workflow de procesamiento con nodos especializados |
+
+### 2.3 ¿Para quién?
 
 - **Asistentes/Coordinadores**: Personas que documentan reuniones manualmente
 - **Equipos de proyecto**: Que necesitan trazabilidad de acuerdos y acciones
 - **Líderes/Gerentes**: Que requieren resúmenes ejecutivos rápidos
 - **Contexto**: Empresas tecnológicas, equipos ágiles, consultoría
 
-### 2.3 Problema que resuelve
+### 2.4 Problema que resuelve
 
 - Documentación manual de reuniones consume tiempo y es inconsistente
 - Información valiosa queda dispersa en grabaciones o notas desordenadas
@@ -74,9 +85,11 @@
 
 - Procesamiento de archivos multimedia (audio/video) mediante transcripción
 - Procesamiento de documentos de texto (TXT, Markdown)
-- Workflow de 5 nodos especializados con LangGraph
+- Workflow de nodos especializados con LangGraph (incluye preproceso + 5 nodos de extracción/generación)
 - Generación de minutas, acciones, temas, participantes y resumen ejecutivo
-- Interfaz de selección de archivos
+- Interfaz de selección de archivos (Gradio)
+- API REST (FastAPI) para procesamiento y consulta
+- Persistencia e historial de reuniones procesadas (consulta posterior por reunión)
 - Manejo básico de errores y casos edge
 
 ### 3.2 Excluido del alcance (v1)
@@ -122,13 +135,16 @@ Para cada entrada procesada, el sistema debe generar:
 ### 6.1 Diagrama de flujo
 
 ```
-START → extract_participants → identify_topics → extract_actions → generate_minutes → create_summary → END
+START → preprocess (route) → extract_participants → identify_topics → extract_actions → generate_minutes → create_summary → END
 ```
+
+El nodo **preprocess** determina si la entrada es multimedia (requiere transcripción) o texto, y prepara `raw_text` para el flujo.
 
 ### 6.2 Secuencia de nodos
 
 | Orden | Nodo | Descripción |
 |-------|------|-------------|
+| 0 | preprocess | Enrutamiento: multimedia → transcripción; texto → lectura directa. Produce `raw_text` |
 | 1 | extract_participants | Extrae nombres de participantes |
 | 2 | identify_topics | Identifica temas principales |
 | 3 | extract_actions | Extrae acciones y responsables |
@@ -137,6 +153,7 @@ START → extract_participants → identify_topics → extract_actions → gener
 
 ### 6.3 Dependencias entre nodos
 
+- **preprocess**: Debe ejecutarse primero; produce `raw_text` a partir de la entrada (transcripción o lectura).
 - **extract_participants**, **identify_topics**, **extract_actions**: Pueden ejecutarse en paralelo desde el punto de vista lógico (extraen información independiente del texto)
 - **generate_minutes**: Depende de participantes, temas y acciones (usa toda la info extraída)
 - **create_summary**: Depende de toda la información procesada (incluida la minuta)
@@ -144,6 +161,15 @@ START → extract_participants → identify_topics → extract_actions → gener
 ---
 
 ## 7. Especificación de Nodos
+
+### 7.0 Nodo 0: Preproceso (route)
+
+| Atributo | Valor |
+|----------|-------|
+| **Responsabilidad** | Determinar tipo de entrada (multimedia vs texto) y producir `raw_text` |
+| **Multimedia** | Invoca transcripción (STT); resultado → `raw_text` |
+| **Texto** | Lee contenido de archivo TXT/MD o cuerpo JSON; → `raw_text` |
+| **Output** | Estado inicial con `raw_text` y opcionalmente `source_file` |
 
 ### 7.1 Nodo 1: Extractor de Participantes
 
@@ -205,7 +231,7 @@ START → extract_participants → identify_topics → extract_actions → gener
 
 ### 8.3 RF-03: Workflow LangGraph
 
-- **RF-03.1**: Implementar grafo con 5 nodos especializados en secuencia
+- **RF-03.1**: Implementar grafo con nodo preprocess + 5 nodos especializados en secuencia
 - **RF-03.2**: Definir clase State con todos los campos requeridos
 - **RF-03.3**: Cada nodo debe procesar su responsabilidad y actualizar el estado
 
@@ -222,8 +248,23 @@ START → extract_participants → identify_topics → extract_actions → gener
 
 ### 8.6 RF-06: Interfaz y errores
 
-- **RF-06.1**: Interfaz de selección de archivos
+- **RF-06.1**: Interfaz de selección de archivos (Gradio: upload, historial, resultados)
 - **RF-06.2**: Manejo de errores y casos donde la información está incompleta o es ambigua
+
+### 8.7 RF-07: API REST
+
+- **RF-07.1**: `POST /api/v1/process/file` — procesar archivo (multipart: audio/video/texto)
+- **RF-07.2**: `POST /api/v1/process/text` — procesar texto plano (JSON body)
+- **RF-07.3**: `GET /api/v1/meetings` — listar historial de reuniones procesadas
+- **RF-07.4**: `GET /api/v1/meetings/{id}` — detalle de una reunión procesada
+- **RF-07.5**: `GET /health` — health check
+
+### 8.8 RF-08: Persistencia e historial
+
+- **RF-08.1**: Persistir cada reunión procesada en base de datos (MeetingRecord)
+- **RF-08.2**: Asignar identificador único (id) a cada reunión
+- **RF-08.3**: Permitir consulta de historial (lista y detalle por id)
+- **RF-08.4**: Campos persistidos: participantes, temas, acciones, minuta, resumen, archivo origen, errores, estado (completed | failed | partial), fecha de creación
 
 ---
 
@@ -233,7 +274,11 @@ START → extract_participants → identify_topics → extract_actions → gener
 
 | Requisito | Especificación |
 |-----------|----------------|
-| Framework | LangGraph para orquestación del workflow |
+| Orquestación | LangGraph para workflow multi-nodo |
+| Modelos y prompts | LangChain para LLM, prompts y parsing estructurado |
+| API REST | FastAPI (validación Pydantic, async, OpenAPI) |
+| UI | Gradio (upload, historial, resultados) |
+| Persistencia | SQLModel/SQLAlchemy + SQLite/PostgreSQL para historial |
 | Modelos | LLM para extracción y generación (por definir: OpenAI, Anthropic, local) |
 | Transcripción | Servicio de Speech-to-Text para multimedia (por definir: Whisper, API cloud) |
 
@@ -274,10 +319,13 @@ START → extract_participants → identify_topics → extract_actions → gener
 
 | # | Tarea | Criterio de completitud |
 |---|-------|-------------------------|
-| 1 | Añadir capacidad de procesamiento de archivos de texto | Carga de TXT/MD |
-| 2 | Integrar transcripción de archivos multimedia | Audio/video → texto |
-| 3 | Implementar interfaz de selección de archivos | UI para subir/seleccionar archivos |
-| 4 | Añadir manejo de errores y casos edge | Errores capturados y mensajes claros |
+| 1 | Implementar nodo preprocess y rutas multimedia vs texto | Enrutamiento funcional |
+| 2 | Añadir capacidad de procesamiento de archivos de texto | Carga de TXT/MD vía file_loader |
+| 3 | Integrar transcripción de archivos multimedia | Audio/video → texto |
+| 4 | Implementar API REST (FastAPI) | Endpoints /process y /meetings operativos |
+| 5 | Implementar persistencia y repositorio de reuniones | MeetingRecord en BD; create, get, list |
+| 6 | Implementar interfaz Gradio (upload, historial) | UI para subir archivos y consultar reuniones |
+| 7 | Añadir manejo de errores y casos edge | Errores capturados y mensajes claros |
 
 ---
 
@@ -291,6 +339,8 @@ START → extract_participants → identify_topics → extract_actions → gener
 - [ ] El resumen ejecutivo no excede 30 palabras
 - [ ] Los temas están entre 3 y 5
 - [ ] Las acciones incluyen responsable cuando es identificable
+- [ ] Cada reunión procesada se persiste con id único y se puede consultar por historial
+- [ ] La API REST responde correctamente en /process y /meetings
 
 ### 11.2 Criterios por nodo
 
@@ -344,6 +394,15 @@ raw_text: str                # texto fuente (opcional, para trazabilidad)
 | Texto muy corto | Advertencia al usuario; outputs con prefijo "[Información limitada]" |
 | Audio de baja calidad | Transcripción con marcadores de incertidumbre; LLM puede indicar ambigüedad |
 
+### 12.5 Consideraciones de API y seguridad
+
+| Escenario | Estrategia |
+|-----------|------------|
+| Transcripción fallida | Añadir a `processing_errors`; retornar estado parcial o HTTP 422 |
+| Archivo no soportado | Validación MIME en API; respuesta 400 |
+| Texto vacío o muy corto | Validación en API; nodos retornan valores por defecto o "[Información limitada]" |
+| Seguridad | Validar tipos MIME y extensiones en uploads; límite de tamaño de archivo configurable |
+
 ---
 
 ## Anexo A: Campos del Estado (Propuesta)
@@ -358,6 +417,16 @@ raw_text: str                # texto fuente (opcional, para trazabilidad)
 | executive_summary | str | Sí | Resumen (max 30 palabras) |
 | source_file | str | No | Nombre del archivo de origen |
 | processing_errors | list | No | Errores o advertencias durante el proceso |
+
+### Campos del registro persistido (MeetingRecord)
+
+Además del estado del workflow, el registro en base de datos incluye:
+
+| Campo | Descripción |
+|-------|-------------|
+| id | Identificador único (UUID) |
+| status | Estado: `completed` \| `failed` \| `partial` |
+| created_at | Fecha y hora de procesamiento |
 
 ---
 
