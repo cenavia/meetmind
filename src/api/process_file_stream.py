@@ -21,6 +21,8 @@ from src.api.multimedia_validation import (
     validate_multimedia_file,
 )
 from src.config import get_processing_timeout_sec, get_transcription_backend
+from src.db.meeting_persist import persist_failed, persist_graph_success
+from src.db.repository import MeetingRepository
 from src.services.file_loader import FileLoaderError, load_text_file
 from src.services.transcription import TranscriptionError, transcribe_audio
 
@@ -45,11 +47,48 @@ def _response_dict(result: dict) -> dict:
     }
 
 
+def _sse_try_persist_success(
+    repo: MeetingRepository,
+    result: dict,
+    *,
+    source_file_name: str | None,
+    source_file_type: str | None,
+) -> None:
+    try:
+        persist_graph_success(
+            repo,
+            result,
+            source_file_name=source_file_name,
+            source_file_type=source_file_type,
+        )
+    except Exception:
+        logger.exception("No se pudo persistir el resultado de la reunión (SSE)")
+
+
+def _sse_try_persist_failed(
+    repo: MeetingRepository,
+    message: str,
+    *,
+    source_file_name: str | None = None,
+    source_file_type: str | None = None,
+) -> None:
+    try:
+        persist_failed(
+            repo,
+            message,
+            source_file_name=source_file_name,
+            source_file_type=source_file_type,
+        )
+    except Exception:
+        logger.exception("No se pudo persistir reunión fallida (SSE)")
+
+
 async def stream_process_uploaded_file(
     content: bytes,
     filename: str,
     content_type: str | None,
     graph: Any,
+    repo: MeetingRepository,
 ) -> AsyncIterator[str]:
     """Generador async de fragmentos SSE para un archivo ya leído en memoria."""
     if not filename:
@@ -115,14 +154,27 @@ async def stream_process_uploaded_file(
             except TranscriptionError as e:
                 detail = e.args[0] if e.args else "El formato del archivo no es compatible."
                 logger.warning("Transcripción fallida para %s: %s", filename, detail)
+                _sse_try_persist_failed(
+                    repo,
+                    detail,
+                    source_file_name=filename,
+                    source_file_type=ct or ext,
+                )
                 yield sse_event({"type": "error", "status": 422, "detail": detail})
                 return
             except TimeoutError:
+                msg = "El procesamiento tardó demasiado. Intenta con un archivo más corto o vuelve a intentar más tarde."
+                _sse_try_persist_failed(
+                    repo,
+                    msg,
+                    source_file_name=filename,
+                    source_file_type=ct or ext,
+                )
                 yield sse_event(
                     {
                         "type": "error",
                         "status": 408,
-                        "detail": "El procesamiento tardó demasiado. Intenta con un archivo más corto o vuelve a intentar más tarde.",
+                        "detail": msg,
                     }
                 )
                 return
@@ -145,15 +197,28 @@ async def stream_process_uploaded_file(
                     timeout=remaining(),
                 )
             except TimeoutError:
+                msg = "El procesamiento tardó demasiado. Intenta con un archivo más corto o vuelve a intentar más tarde."
+                _sse_try_persist_failed(
+                    repo,
+                    msg,
+                    source_file_name=filename,
+                    source_file_type=ct or ext,
+                )
                 yield sse_event(
                     {
                         "type": "error",
                         "status": 408,
-                        "detail": "El procesamiento tardó demasiado. Intenta con un archivo más corto o vuelve a intentar más tarde.",
+                        "detail": msg,
                     }
                 )
                 return
 
+            _sse_try_persist_success(
+                repo,
+                result,
+                source_file_name=filename,
+                source_file_type=ct or ext,
+            )
             yield sse_event({"type": "complete", "data": _response_dict(result)})
         finally:
             Path(tmp_path).unlink(missing_ok=True)
@@ -203,22 +268,35 @@ async def stream_process_uploaded_file(
                 timeout=remaining(),
             )
         except TimeoutError:
+            msg = "El procesamiento tardó demasiado. Intenta de nuevo."
+            _sse_try_persist_failed(
+                repo,
+                msg,
+                source_file_name=filename,
+                source_file_type=ct or ext,
+            )
             yield sse_event(
                 {
                     "type": "error",
                     "status": 408,
-                    "detail": "El procesamiento tardó demasiado. Intenta de nuevo.",
+                    "detail": msg,
                 }
             )
             return
 
+        _sse_try_persist_success(
+            repo,
+            result,
+            source_file_name=filename,
+            source_file_type=ct or ext,
+        )
         yield sse_event({"type": "complete", "data": _response_dict(result)})
         return
 
     yield sse_event({"type": "error", "status": 415, "detail": MSG_FORMAT_UNSUPPORTED})
 
 
-async def stream_process_text_request(raw_text: str, graph: Any) -> AsyncIterator[str]:
+async def stream_process_text_request(raw_text: str, graph: Any, repo: MeetingRepository) -> AsyncIterator[str]:
     """SSE para POST /text/stream (cuerpo ya validado como string)."""
     text = raw_text.strip()
     if not text:
@@ -264,13 +342,16 @@ async def stream_process_text_request(raw_text: str, graph: Any) -> AsyncIterato
             timeout=remaining(),
         )
     except TimeoutError:
+        msg = "El procesamiento tardó demasiado. Intenta de nuevo o usa un texto más corto."
+        _sse_try_persist_failed(repo, msg, source_file_name=None, source_file_type=None)
         yield sse_event(
             {
                 "type": "error",
                 "status": 408,
-                "detail": "El procesamiento tardó demasiado. Intenta de nuevo o usa un texto más corto.",
+                "detail": msg,
             }
         )
         return
 
+    _sse_try_persist_success(repo, result, source_file_name=None, source_file_type=None)
     yield sse_event({"type": "complete", "data": _response_dict(result)})

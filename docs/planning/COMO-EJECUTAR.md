@@ -109,7 +109,13 @@ cp .env.example .env
 |----------------|----------------------|--------------------------------------|
 | API_BASE_URL   | http://localhost:8000| URL base de la API (usado por la UI) |
 | OPENAI_API_KEY | —                    | No requerido en Hello World (modo mock) |
-| DATABASE_URL   | —                    | Para futuras fases (persistencia)    |
+| DATABASE_URL   | sqlite:///./meetmind.db | SQLite en el directorio de trabajo de la API; persistencia de reuniones procesadas (GET `/api/v1/meetings`) |
+
+**Historial persistido (tras procesar texto o archivo):**
+
+```bash
+curl -s http://localhost:8000/api/v1/meetings
+```
 
 ---
 

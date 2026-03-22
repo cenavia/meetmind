@@ -9,6 +9,14 @@ def get_api_base_url() -> str:
     return os.getenv("API_BASE_URL", "http://localhost:8000")
 
 
+def get_database_url() -> str:
+    """URL SQLAlchemy para persistencia (SQLite por defecto en el directorio de trabajo)."""
+    raw = os.getenv("DATABASE_URL", "").strip()
+    if raw:
+        return raw
+    return "sqlite:///./meetmind.db"
+
+
 # Modelos Whisper válidos (multilingües; sin sufijo .en para español/reuniones mixtas)
 WHISPER_MODELS = frozenset(
     {"tiny", "base", "small", "medium", "large", "large-v2", "large-v3"}

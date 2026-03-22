@@ -12,3 +12,4 @@ class MeetingState(TypedDict, total=False):
     actions: str
     minutes: str
     executive_summary: str
+    processing_errors: str

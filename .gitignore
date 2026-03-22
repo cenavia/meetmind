@@ -25,6 +25,9 @@ build/
 .env
 .env.local
 
+# SQLite local (MeetMind persistencia)
+meetmind.db
+
 # OS
 .DS_Store
 Thumbs.db

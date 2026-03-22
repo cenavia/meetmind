@@ -12,7 +12,9 @@ from pydantic import BaseModel, Field
 from starlette.responses import StreamingResponse
 
 from src.api.process_file_stream import stream_process_text_request, stream_process_uploaded_file
-from src.api.dependencies import get_graph_dep
+from src.api.dependencies import get_graph_dep, get_meeting_repository
+from src.db.meeting_persist import persist_failed, persist_graph_success
+from src.db.repository import MeetingRepository
 from src.api.multimedia_validation import (
     MSG_FORMAT_UNSUPPORTED,
     get_extension_from_filename,
@@ -47,15 +49,47 @@ class ProcessMeetingResponse(BaseModel):
     executive_summary: str
 
 
-def _invoke_graph_with_text(graph, text: str) -> dict:
-    """Ejecuta el grafo con el texto dado."""
-    return graph.invoke({"raw_text": text})
+def _try_persist_success(
+    repo: MeetingRepository,
+    result: dict,
+    *,
+    source_file_name: str | None,
+    source_file_type: str | None,
+) -> None:
+    try:
+        persist_graph_success(
+            repo,
+            result,
+            source_file_name=source_file_name,
+            source_file_type=source_file_type,
+        )
+    except Exception:
+        logger.exception("No se pudo persistir el resultado de la reunión")
+
+
+def _try_persist_failed(
+    repo: MeetingRepository,
+    message: str,
+    *,
+    source_file_name: str | None = None,
+    source_file_type: str | None = None,
+) -> None:
+    try:
+        persist_failed(
+            repo,
+            message,
+            source_file_name=source_file_name,
+            source_file_type=source_file_type,
+        )
+    except Exception:
+        logger.exception("No se pudo persistir reunión en estado fallido")
 
 
 @router.post("/text", response_model=ProcessMeetingResponse)
 def process_text(
     body: ProcessTextRequest,
     graph=Depends(get_graph_dep),
+    repo: MeetingRepository = Depends(get_meeting_repository),
 ) -> ProcessMeetingResponse:
     """Procesa texto de reunión y devuelve resultado estructurado."""
     text = body.text.strip()
@@ -71,6 +105,7 @@ def process_text(
         )
 
     result = graph.invoke({"raw_text": text})
+    _try_persist_success(repo, result, source_file_name=None, source_file_type=None)
 
     return ProcessMeetingResponse(
         participants=result.get("participants", ""),
@@ -88,6 +123,7 @@ async def process_file(
         File(description="Archivo .txt, .md o multimedia (MP4, MOV, MP3, WAV, M4A, WEBM, MKV)"),
     ],
     graph=Depends(get_graph_dep),
+    repo: MeetingRepository = Depends(get_meeting_repository),
 ) -> ProcessMeetingResponse:
     """Procesa archivo de texto o multimedia y devuelve resultado estructurado."""
     if not file.filename:
@@ -133,6 +169,12 @@ async def process_file(
                     future = ex.submit(_transcribe_and_invoke)
                     result = future.result(timeout=timeout_sec)
             except FuturesTimeoutError:
+                _try_persist_failed(
+                    repo,
+                    "El procesamiento tardó demasiado. Intenta con un archivo más corto o vuelve a intentar más tarde.",
+                    source_file_name=file.filename,
+                    source_file_type=content_type or ext,
+                )
                 raise HTTPException(
                     status_code=408,
                     detail="El procesamiento tardó demasiado. Intenta con un archivo más corto o vuelve a intentar más tarde.",
@@ -140,6 +182,12 @@ async def process_file(
             except TranscriptionError as e:
                 detail = e.args[0] if e.args else "El formato del archivo no es compatible."
                 logger.warning("Transcripción fallida para %s: %s", file.filename, detail)
+                _try_persist_failed(
+                    repo,
+                    detail,
+                    source_file_name=file.filename,
+                    source_file_type=content_type or ext,
+                )
                 raise HTTPException(status_code=422, detail=detail) from e
         finally:
             try:
@@ -151,6 +199,12 @@ async def process_file(
             except OSError:
                 pass
 
+        _try_persist_success(
+            repo,
+            result,
+            source_file_name=file.filename,
+            source_file_type=content_type or ext,
+        )
         return ProcessMeetingResponse(
             participants=result.get("participants", ""),
             topics=result.get("topics", ""),
@@ -172,7 +226,12 @@ async def process_file(
             raise HTTPException(status_code=e.status_code, detail=e.message) from e
 
         result = graph.invoke({"raw_text": text})
-
+        _try_persist_success(
+            repo,
+            result,
+            source_file_name=file.filename,
+            source_file_type=content_type or ext,
+        )
         return ProcessMeetingResponse(
             participants=result.get("participants", ""),
             topics=result.get("topics", ""),
@@ -198,6 +257,7 @@ async def process_file_stream(
         File(description="Archivo .txt, .md o multimedia (streaming SSE con fases)"),
     ],
     graph=Depends(get_graph_dep),
+    repo: MeetingRepository = Depends(get_meeting_repository),
 ):
     """
     Igual que POST /file pero devuelve **text/event-stream** (SSE).
@@ -211,7 +271,7 @@ async def process_file_stream(
     filename = file.filename or ""
     ct = file.content_type
     return StreamingResponse(
-        stream_process_uploaded_file(content, filename, ct, graph),
+        stream_process_uploaded_file(content, filename, ct, graph, repo),
         media_type="text/event-stream",
         headers=_SSE_HEADERS,
     )
@@ -221,10 +281,11 @@ async def process_file_stream(
 async def process_text_stream(
     body: ProcessTextRequest,
     graph=Depends(get_graph_dep),
+    repo: MeetingRepository = Depends(get_meeting_repository),
 ):
     """Procesa texto con SSE (fase analyzing + complete o error)."""
     return StreamingResponse(
-        stream_process_text_request(body.text, graph),
+        stream_process_text_request(body.text, graph, repo),
         media_type="text/event-stream",
         headers=_SSE_HEADERS,
     )
