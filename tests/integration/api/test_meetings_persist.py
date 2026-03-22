@@ -41,6 +41,7 @@ def test_post_text_then_list_and_get(isolated_client: TestClient) -> None:
     assert data["id"] == mid
     assert "participants" in data
     assert data["status"] in ("completed", "partial")
+    assert isinstance(data.get("processing_errors"), list)
 
 
 def test_get_unknown_meeting_404(isolated_client: TestClient) -> None:

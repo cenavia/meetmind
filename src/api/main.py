@@ -20,8 +20,11 @@ logging.basicConfig(
     format="%(levelname)s:%(name)s:%(message)s",
 )
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exception_handlers import http_exception_handler, request_validation_exception_handler
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from src.api.routers import health, meetings, process
 from src.db.database import init_db
@@ -71,3 +74,22 @@ app.add_middleware(
 app.include_router(health.router)
 app.include_router(process.router, prefix="/api/v1")
 app.include_router(meetings.router, prefix="/api/v1")
+
+
+@app.exception_handler(RequestValidationError)
+async def _request_validation_handler(request: Request, exc: RequestValidationError):
+    return await request_validation_exception_handler(request, exc)
+
+
+@app.exception_handler(HTTPException)
+async def _http_exception_handler(request: Request, exc: HTTPException):
+    return await http_exception_handler(request, exc)
+
+
+@app.exception_handler(Exception)
+async def _unhandled_exception_handler(request: Request, exc: Exception):
+    logger.exception("Error no controlado en la API")
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Ha ocurrido un error inesperado. Intenta de nuevo más tarde."},
+    )

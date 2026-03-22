@@ -19,6 +19,8 @@ Auto-generated from all feature plans. Last updated: 2026-03-22
 - SQLite (`sqlite:///./meetmind.db` por defecto si `DATABASE_URL` no está definida) o PostgreSQL/MySQL según URL estándar SQLAlchemy (011-persist-meeting-records)
 - Python 3.11+ + FastAPI, Pydantic v2, SQLModel/SQLAlchemy 2.x, LangGraph (invocado solo desde la capa API) (012-meetings-rest-api)
 - SQLite por defecto / URL SQLAlchemy (`DATABASE_URL`) — mismo modelo `MeetingRecord` que 011 (012-meetings-rest-api)
+- Python 3.11+ + FastAPI, Pydantic v2, LangGraph/LangChain, Gradio, SQLModel/SQLAlchemy 2.x, httpx (UI → API) (013-incomplete-error-feedback)
+- SQLite por defecto (`MeetingRecord.processing_errors` como `Text`; serialización acordada en [data-model.md](./data-model.md)) (013-incomplete-error-feedback)
 
 - Python 3.11+ + FastAPI, Gradio, LangGraph, LangChain (langchain-core), uv (gestor) (001-hello-world-e2e)
 
@@ -38,9 +40,9 @@ cd src [ONLY COMMANDS FOR ACTIVE TECHNOLOGIES][ONLY COMMANDS FOR ACTIVE TECHNOLO
 Python 3.11+: Follow standard conventions
 
 ## Recent Changes
+- 013-incomplete-error-feedback: Added Python 3.11+ + FastAPI, Pydantic v2, LangGraph/LangChain, Gradio, SQLModel/SQLAlchemy 2.x, httpx (UI → API)
 - 012-meetings-rest-api: Added Python 3.11+ + FastAPI, Pydantic v2, SQLModel/SQLAlchemy 2.x, LangGraph (invocado solo desde la capa API)
 - 011-persist-meeting-records: Added Python 3.11+ + FastAPI, SQLModel, SQLAlchemy 2.x, LangGraph (sin cambio de forma del grafo obligatorio), Pydantic v2
-- 009-multimedia-recording: OpenAI whisper-1 (cloud) u openai-whisper local; ffmpeg (sistema)
 
 
 <!-- MANUAL ADDITIONS START -->

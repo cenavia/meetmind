@@ -16,12 +16,14 @@ from src.config import (
     get_transcription_backend,
 )
 from src.ui.sse_client import iter_sse_events, read_http_error_body
+from src.ui.result_layout import render_result_as_markdown, split_api_payload
 from src.ui.status_loader import (
     LOADER_CSS,
     loader_from_api_phase,
     loader_idle,
     loader_multimedia,
 )
+from src.ui.theme import meetmind_theme
 from src.ui.utils import get_mime_for_extension, is_multimedia_path, validate_file
 
 
@@ -44,24 +46,19 @@ def _format_http_error(e: httpx.HTTPStatusError) -> str:
 
 
 def _format_result(data: dict) -> str:
-    """Formatea el resultado estructurado como Markdown."""
-    lines = [
-        "## Participantes",
-        data.get("participants", "-"),
-        "",
-        "## Temas",
-        data.get("topics", "-"),
-        "",
-        "## Acciones",
-        data.get("actions", "-"),
-        "",
-        "## Minuta",
-        data.get("minutes", "-"),
-        "",
-        "## Resumen ejecutivo",
-        data.get("executive_summary", "-"),
-    ]
-    return "\n".join(lines)
+    """Resultado completo en Markdown (HTTP síncrono y compatibilidad)."""
+    return render_result_as_markdown(data)
+
+
+def _technical_details_markdown() -> str:
+    from src.config import get_transcription_mode_label, get_processing_timeout_sec
+
+    m = max(1, (get_processing_timeout_sec() + 59) // 60)
+    return (
+        f"**Modo de transcripción (servidor):** {get_transcription_mode_label()}\n\n"
+        f"**Tiempo máximo de espera:** ~{m} min.\n\n"
+        "_No se muestran claves API, URLs de base de datos ni rutas internas._"
+    )
 
 
 def _event_transcription_backend(event: dict, *, is_multimedia_file: bool) -> str | None:
@@ -236,14 +233,31 @@ def process_meeting_file(file) -> str:
 def on_process(text: str, file):
     """
     Procesa texto o archivo con panel de estado alineado a las **fases reales** del servidor (SSE).
+    Salidas: loader, meta (estado+avisos HTML), análisis Markdown, transcripción, botón procesar.
     """
     done_btn = gr.update(interactive=False)
+    tr_empty = gr.update(value="", visible=False)
+    meta_empty = gr.update(value="")
     path = _resolve_file_path(file)
+
+    def _yield_idle(meta_h: str, analysis: str, tr_upd, btn):
+        yield (
+            gr.update(value=loader_idle()),
+            gr.update(value=meta_h),
+            gr.update(value=analysis),
+            tr_upd,
+            btn,
+        )
 
     if path and path.exists():
         err = validate_file(path)
         if err:
-            yield gr.update(value=loader_idle()), gr.update(value=err), done_btn
+            yield from _yield_idle(
+                "",
+                f"## Validación\n\n{err}",
+                tr_empty,
+                gr.update(interactive=True),
+            )
             return
 
         is_mm = is_multimedia_path(path)
@@ -254,14 +268,18 @@ def on_process(text: str, file):
             gr.update(
                 value=loader_multimedia(1, hint=hint, transcription_backend=tb_initial),
             ),
+            meta_empty,
             gr.update(value=""),
+            tr_empty,
             done_btn,
         )
 
         q: queue.Queue = queue.Queue()
         threading.Thread(target=_sse_file_worker, args=(path, q), daemon=True).start()
 
-        result_md = ""
+        result_meta = ""
+        result_analysis = ""
+        result_tr = tr_empty
         t0 = time.monotonic()
         while True:
             try:
@@ -280,17 +298,35 @@ def on_process(text: str, file):
                     hint=hint,
                     transcription_backend=_event_transcription_backend(event, is_multimedia_file=is_mm),
                 )
-                yield gr.update(value=panel), gr.update(value=""), done_btn
+                yield (
+                    gr.update(value=panel),
+                    meta_empty,
+                    gr.update(value=""),
+                    tr_empty,
+                    done_btn,
+                )
             elif et == "complete":
-                result_md = _format_result(event["data"])
+                m, a, tr_txt = split_api_payload(event["data"])
+                result_meta = m
+                result_analysis = a
+                result_tr = gr.update(value=tr_txt, visible=bool(tr_txt))
             elif et == "error":
                 detail = event.get("detail", "Error")
-                result_md = detail if isinstance(detail, str) else str(detail)
+                msg = detail if isinstance(detail, str) else str(detail)
+                result_meta = ""
+                result_analysis = f"## Error\n\n{msg}"
+                result_tr = tr_empty
 
-        if not result_md:
-            result_md = "Respuesta incompleta del servidor."
+        if not result_analysis:
+            result_analysis = "Respuesta incompleta del servidor."
 
-        yield gr.update(value=loader_idle()), gr.update(value=result_md), done_btn
+        yield (
+            gr.update(value=loader_idle()),
+            gr.update(value=result_meta),
+            gr.update(value=result_analysis),
+            result_tr,
+            gr.update(interactive=True),
+        )
         return
 
     if text and text.strip():
@@ -303,7 +339,9 @@ def on_process(text: str, file):
                     transcription_backend="none",
                 )
             ),
+            meta_empty,
             gr.update(value=""),
+            tr_empty,
             done_btn,
         )
 
@@ -311,7 +349,9 @@ def on_process(text: str, file):
         threading.Thread(target=_sse_text_worker, args=(text, q2), daemon=True).start()
 
         hint_txt = _timeout_hint_minutes()
-        result_md = ""
+        result_meta = ""
+        result_analysis = ""
+        result_tr = tr_empty
         t0 = time.monotonic()
         while True:
             try:
@@ -330,23 +370,48 @@ def on_process(text: str, file):
                     hint=hint_txt,
                     transcription_backend=_event_transcription_backend(event, is_multimedia_file=False),
                 )
-                yield gr.update(value=panel), gr.update(value=""), done_btn
+                yield (
+                    gr.update(value=panel),
+                    meta_empty,
+                    gr.update(value=""),
+                    tr_empty,
+                    done_btn,
+                )
             elif et == "complete":
-                result_md = _format_result(event["data"])
+                m, a, tr_txt = split_api_payload(event["data"])
+                result_meta = m
+                result_analysis = a
+                result_tr = gr.update(value=tr_txt, visible=bool(tr_txt))
             elif et == "error":
                 detail = event.get("detail", "Error")
-                result_md = detail if isinstance(detail, str) else str(detail)
+                msg = detail if isinstance(detail, str) else str(detail)
+                result_meta = ""
+                result_analysis = f"## Error\n\n{msg}"
+                result_tr = tr_empty
 
-        if not result_md:
-            result_md = "Respuesta incompleta del servidor."
+        if not result_analysis:
+            result_analysis = "Respuesta incompleta del servidor."
 
-        yield gr.update(value=loader_idle()), gr.update(value=result_md), done_btn
+        yield (
+            gr.update(value=loader_idle()),
+            gr.update(value=result_meta),
+            gr.update(value=result_analysis),
+            result_tr,
+            gr.update(interactive=True),
+        )
         return
 
     yield (
         gr.update(value=loader_idle()),
-        gr.update(value="Introduce texto o sube un archivo antes de procesar."),
-        done_btn,
+        meta_empty,
+        gr.update(
+            value=(
+                "## Falta contenido\n\nAñade **texto de la reunión** o **un archivo** "
+                "antes de pulsar **Procesar**."
+            )
+        ),
+        tr_empty,
+        gr.update(interactive=True),
     )
 
 
@@ -377,7 +442,7 @@ def update_inputs(text: str, file) -> tuple[dict, dict, dict]:
 
 def create_ui():
     """Crea la interfaz Gradio."""
-    with gr.Blocks(title="MeetMind", css=LOADER_CSS) as demo:
+    with gr.Blocks(title="MeetMind", theme=meetmind_theme(), css=LOADER_CSS) as demo:
         gr.Markdown("# MeetMind - Procesamiento de reuniones")
         with gr.Row():
             with gr.Column(scale=1):
@@ -397,10 +462,33 @@ def create_ui():
             "(configuración `TRANSCRIPTION_BACKEND` / `OPENAI_API_KEY` en el servidor).*"
         )
         status_panel = gr.HTML(value="")
+        with gr.Accordion("Detalles técnicos", open=False):
+            gr.Markdown(_technical_details_markdown())
+        with gr.Row():
+            with gr.Column(scale=3):
+                result_meta = gr.HTML(value="")
+                output = gr.Markdown(label="Análisis")
+            with gr.Column(scale=2):
+                try:
+                    transcript_tb = gr.Textbox(
+                        label="Transcripción",
+                        lines=12,
+                        max_lines=24,
+                        interactive=False,
+                        visible=False,
+                        show_copy_button=True,
+                    )
+                except TypeError:
+                    transcript_tb = gr.Textbox(
+                        label="Transcripción",
+                        lines=12,
+                        max_lines=24,
+                        interactive=False,
+                        visible=False,
+                    )
         with gr.Row():
             process_btn = gr.Button("Procesar", variant="primary", interactive=False)
             clear_btn = gr.Button("Limpiar", variant="secondary")
-        output = gr.Markdown(label="Resultado")
 
         def on_text_change(text: str, file):
             return update_inputs(text, file)
@@ -426,18 +514,28 @@ def create_ui():
                 gr.update(interactive=False),
                 gr.update(value=""),
                 "",
+                "",
+                gr.update(value="", visible=False),
             )
 
         clear_btn.click(
             fn=do_clear,
             inputs=[],
-            outputs=[text_input, file_input, process_btn, status_panel, output],
+            outputs=[
+                text_input,
+                file_input,
+                process_btn,
+                status_panel,
+                result_meta,
+                output,
+                transcript_tb,
+            ],
         )
 
         process_btn.click(
             fn=on_process,
             inputs=[text_input, file_input],
-            outputs=[status_panel, output, process_btn],
+            outputs=[status_panel, result_meta, output, transcript_tb, process_btn],
             show_progress=True,
         )
 

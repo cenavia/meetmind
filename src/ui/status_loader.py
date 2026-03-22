@@ -207,4 +207,40 @@ LOADER_CSS = """
   0% { background-position: 100% 0; }
   100% { background-position: -100% 0; }
 }
+.mm-status {
+  margin: 0.5rem 0 0.75rem 0;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  background: var(--background-fill-secondary, #f3f4f6);
+  border: 1px solid var(--border-color-primary, #e5e7eb);
+  font-size: 0.95rem;
+}
+.mm-warn {
+  margin-bottom: 1rem;
+  border: 1px solid var(--border-color-primary, #e5e7eb);
+  border-radius: 8px;
+  padding: 0.65rem 0.85rem;
+  background: var(--background-fill-secondary, #f9fafb);
+}
+.mm-warn-title {
+  margin: 0 0 0.4rem 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+.mm-warn-empty {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--body-text-color-subdued, #6b7280);
+}
+.mm-warn-scroll {
+  max-height: 220px;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+.mm-warn-list {
+  margin: 0;
+  padding-left: 1.2rem;
+  font-size: 0.88rem;
+}
+.mm-warn-list li { margin-bottom: 0.25rem; }
 """

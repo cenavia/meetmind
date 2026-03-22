@@ -116,3 +116,17 @@ def get_processing_timeout_sec() -> int:
         return int(val)
     except ValueError:
         return 900
+
+
+def get_meeting_min_words() -> int:
+    """
+    Umbral mínimo de palabras para considerar el texto de reunión “muy corto” (advertencia).
+
+    Por defecto **20**; override con `MEETING_MIN_WORDS` (entero ≥ 1).
+    """
+    val = os.getenv("MEETING_MIN_WORDS", "20")
+    try:
+        n = int(val)
+        return max(1, n)
+    except ValueError:
+        return 20

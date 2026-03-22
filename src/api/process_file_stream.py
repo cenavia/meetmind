@@ -22,7 +22,7 @@ from src.api.multimedia_validation import (
     validate_multimedia_file,
 )
 from src.config import get_processing_timeout_sec, get_transcription_backend
-from src.db.meeting_persist import persist_failed, persist_graph_success
+from src.db.meeting_persist import persist_failed, persist_graph_success, public_process_fields
 from src.db.repository import MeetingRepository
 from src.services.file_loader import FileLoaderError, load_text_file
 from src.services.transcription import TranscriptionError, transcribe_audio
@@ -39,16 +39,8 @@ def sse_event(data: dict) -> str:
 
 
 def _response_dict(result: dict, meeting_id: UUID | None = None) -> dict:
-    out = {
-        "participants": result.get("participants", ""),
-        "topics": result.get("topics", ""),
-        "actions": result.get("actions", ""),
-        "minutes": result.get("minutes", ""),
-        "executive_summary": result.get("executive_summary", ""),
-    }
-    if meeting_id is not None:
-        out["meeting_id"] = str(meeting_id)
-    return out
+    """Payload alineado a `ProcessMeetingResponse` / contrato spec 013."""
+    return public_process_fields(result, meeting_id)
 
 
 def _sse_persist_graph_success(
@@ -195,7 +187,7 @@ async def stream_process_uploaded_file(
             )
 
             def _invoke_graph() -> dict:
-                return graph.invoke({"raw_text": text})
+                return graph.invoke({"raw_text": text, "transcript": text})
 
             try:
                 result = await asyncio.wait_for(

@@ -44,14 +44,34 @@ class ProcessTextRequest(BaseModel):
 
 
 class ProcessMeetingResponse(BaseModel):
-    """Response con resultado estructurado."""
+    """Response con resultado estructurado (spec 013: estado, avisos, transcripción)."""
 
     participants: str
     topics: str
     actions: str
     minutes: str
     executive_summary: str
+    status: str
+    processing_errors: list[str] = Field(default_factory=list)
+    transcript: str = ""
     meeting_id: UUID | None = None
+
+
+def _result_to_response(result: dict, meeting_id: UUID | None) -> ProcessMeetingResponse:
+    from src.db.meeting_persist import public_process_fields
+
+    d = public_process_fields(result, meeting_id)
+    return ProcessMeetingResponse(
+        participants=d["participants"],
+        topics=d["topics"],
+        actions=d["actions"],
+        minutes=d["minutes"],
+        executive_summary=d["executive_summary"],
+        status=d["status"],
+        processing_errors=d["processing_errors"],
+        transcript=d["transcript"],
+        meeting_id=meeting_id,
+    )
 
 
 def _persist_graph_success_or_503(
@@ -101,8 +121,10 @@ def _try_persist_failed(
     summary="Procesar reunión desde texto",
     description=(
         "Envía el texto de la reunión en JSON; el procesamiento es **síncrono** hasta obtener "
-        "participantes, temas, acciones, minuta y resumen. Si la persistencia está activa, "
-        "se crea un registro y se devuelve `meeting_id`."
+        "participantes, temas, acciones, minuta y resumen. Incluye `status`, `processing_errors` "
+        "(lista) y `transcript` (vacío si no hubo STT). Contrato: "
+        "`specs/013-incomplete-error-feedback/contracts/processing-feedback.md`. "
+        "Si la persistencia está activa, se crea un registro y se devuelve `meeting_id`."
     ),
     response_description="Resultado estructurado; puede incluir `meeting_id` si el guardado en BD tuvo éxito.",
 )
@@ -132,14 +154,7 @@ def process_text(
         source_file_type=None,
     )
 
-    return ProcessMeetingResponse(
-        participants=result.get("participants", ""),
-        topics=result.get("topics", ""),
-        actions=result.get("actions", ""),
-        minutes=result.get("minutes", ""),
-        executive_summary=result.get("executive_summary", ""),
-        meeting_id=meeting_id,
-    )
+    return _result_to_response(result, meeting_id)
 
 
 @router.post(
@@ -148,7 +163,9 @@ def process_text(
     summary="Procesar reunión desde archivo",
     description=(
         "Sube un archivo de texto (.txt, .md) o multimedia admitido; el servidor transcribe si aplica "
-        "y ejecuta el análisis de forma **síncrona**. Respuesta alineada a `POST /text`, incluido "
+        "y ejecuta el análisis de forma **síncrona**. Respuesta alineada a `POST /text` "
+        "(`status`, `processing_errors` como lista, `transcript` si hubo STT). Contrato: "
+        "`specs/013-incomplete-error-feedback/contracts/processing-feedback.md`. "
         "`meeting_id` cuando la persistencia tiene éxito."
     ),
     response_description="Resultado estructurado; puede incluir `meeting_id` si el guardado en BD tuvo éxito.",
@@ -198,7 +215,7 @@ async def process_file(
             def _transcribe_and_invoke():
                 # Multimedia → texto solo con openai-whisper (ver src/services/transcription.py)
                 text = transcribe_audio(tmp_path)
-                return graph.invoke({"raw_text": text})
+                return graph.invoke({"raw_text": text, "transcript": text})
 
             try:
                 with ThreadPoolExecutor(max_workers=1) as ex:
@@ -241,14 +258,7 @@ async def process_file(
             source_file_name=file.filename,
             source_file_type=content_type or ext,
         )
-        return ProcessMeetingResponse(
-            participants=result.get("participants", ""),
-            topics=result.get("topics", ""),
-            actions=result.get("actions", ""),
-            minutes=result.get("minutes", ""),
-            executive_summary=result.get("executive_summary", ""),
-            meeting_id=meeting_id,
-        )
+        return _result_to_response(result, meeting_id)
 
     if ext in {".txt", ".md"}:
         if content_type and content_type not in ALLOWED_MIME_TYPES_TEXT:
@@ -269,14 +279,7 @@ async def process_file(
             source_file_name=file.filename,
             source_file_type=content_type or ext,
         )
-        return ProcessMeetingResponse(
-            participants=result.get("participants", ""),
-            topics=result.get("topics", ""),
-            actions=result.get("actions", ""),
-            minutes=result.get("minutes", ""),
-            executive_summary=result.get("executive_summary", ""),
-            meeting_id=meeting_id,
-        )
+        return _result_to_response(result, meeting_id)
 
     raise HTTPException(status_code=415, detail=MSG_FORMAT_UNSUPPORTED)
 
