@@ -4,8 +4,8 @@ MeetMind API - FastAPI application.
 Ejecutar:
     uv run uvicorn src.api.main:app --reload --host 0.0.0.0 --port 8000
 
-Health check:
-    curl http://localhost:8000/health
+Health (liveness): curl http://localhost:8000/health
+Readiness:         curl http://localhost:8000/ready
 """
 
 import logging
@@ -46,9 +46,18 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="MeetMind API",
-    description="Sistema de procesamiento de reuniones con IA",
-    version="0.1.0",
+    description=(
+        "API REST v1 para procesar reuniones (texto o archivo), consultar historial persistido "
+        "y comprobar disponibilidad (`/health` liveness, `/ready` readiness). Documentación "
+        "interactiva en `/docs`."
+    ),
+    version="0.2.0",
     lifespan=lifespan,
+    openapi_tags=[
+        {"name": "health", "description": "Liveness y readiness del servicio"},
+        {"name": "process", "description": "Procesamiento síncrono y streaming (SSE)"},
+        {"name": "meetings", "description": "Lectura de reuniones almacenadas"},
+    ],
 )
 
 app.add_middleware(

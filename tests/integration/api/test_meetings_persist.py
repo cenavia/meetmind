@@ -24,12 +24,16 @@ def test_post_text_then_list_and_get(isolated_client: TestClient) -> None:
     body = {"text": "Reunión con Ana y Luis. Acordamos revisar el presupuesto."}
     pr = isolated_client.post("/api/v1/process/text", json=body)
     assert pr.status_code == 200
+    pdata = pr.json()
+    assert "meeting_id" in pdata
+    assert pdata["meeting_id"] is not None
 
     lr = isolated_client.get("/api/v1/meetings")
     assert lr.status_code == 200
     items = lr.json()["items"]
     assert len(items) >= 1
     mid = items[0]["id"]
+    assert pdata["meeting_id"] == mid
 
     gr = isolated_client.get(f"/api/v1/meetings/{mid}")
     assert gr.status_code == 200

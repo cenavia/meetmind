@@ -11,6 +11,7 @@ import time
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
 from starlette.concurrency import run_in_threadpool
 
@@ -37,32 +38,37 @@ def sse_event(data: dict) -> str:
     return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
-def _response_dict(result: dict) -> dict:
-    return {
+def _response_dict(result: dict, meeting_id: UUID | None = None) -> dict:
+    out = {
         "participants": result.get("participants", ""),
         "topics": result.get("topics", ""),
         "actions": result.get("actions", ""),
         "minutes": result.get("minutes", ""),
         "executive_summary": result.get("executive_summary", ""),
     }
+    if meeting_id is not None:
+        out["meeting_id"] = str(meeting_id)
+    return out
 
 
-def _sse_try_persist_success(
+def _sse_persist_graph_success(
     repo: MeetingRepository,
     result: dict,
     *,
     source_file_name: str | None,
     source_file_type: str | None,
-) -> None:
+) -> UUID | None:
     try:
-        persist_graph_success(
+        row = persist_graph_success(
             repo,
             result,
             source_file_name=source_file_name,
             source_file_type=source_file_type,
         )
+        return row.id
     except Exception:
         logger.exception("No se pudo persistir el resultado de la reunión (SSE)")
+        return None
 
 
 def _sse_try_persist_failed(
@@ -213,13 +219,22 @@ async def stream_process_uploaded_file(
                 )
                 return
 
-            _sse_try_persist_success(
+            meeting_id = _sse_persist_graph_success(
                 repo,
                 result,
                 source_file_name=filename,
                 source_file_type=ct or ext,
             )
-            yield sse_event({"type": "complete", "data": _response_dict(result)})
+            if meeting_id is None:
+                yield sse_event(
+                    {
+                        "type": "error",
+                        "status": 503,
+                        "detail": "No se pudo guardar el resultado en el almacenamiento. Intenta de nuevo más tarde.",
+                    }
+                )
+                return
+            yield sse_event({"type": "complete", "data": _response_dict(result, meeting_id)})
         finally:
             Path(tmp_path).unlink(missing_ok=True)
         return
@@ -284,13 +299,22 @@ async def stream_process_uploaded_file(
             )
             return
 
-        _sse_try_persist_success(
+        meeting_id = _sse_persist_graph_success(
             repo,
             result,
             source_file_name=filename,
             source_file_type=ct or ext,
         )
-        yield sse_event({"type": "complete", "data": _response_dict(result)})
+        if meeting_id is None:
+            yield sse_event(
+                {
+                    "type": "error",
+                    "status": 503,
+                    "detail": "No se pudo guardar el resultado en el almacenamiento. Intenta de nuevo más tarde.",
+                }
+            )
+            return
+        yield sse_event({"type": "complete", "data": _response_dict(result, meeting_id)})
         return
 
     yield sse_event({"type": "error", "status": 415, "detail": MSG_FORMAT_UNSUPPORTED})
@@ -353,5 +377,16 @@ async def stream_process_text_request(raw_text: str, graph: Any, repo: MeetingRe
         )
         return
 
-    _sse_try_persist_success(repo, result, source_file_name=None, source_file_type=None)
-    yield sse_event({"type": "complete", "data": _response_dict(result)})
+    meeting_id = _sse_persist_graph_success(
+        repo, result, source_file_name=None, source_file_type=None
+    )
+    if meeting_id is None:
+        yield sse_event(
+            {
+                "type": "error",
+                "status": 503,
+                "detail": "No se pudo guardar el resultado en el almacenamiento. Intenta de nuevo más tarde.",
+            }
+        )
+        return
+    yield sse_event({"type": "complete", "data": _response_dict(result, meeting_id)})

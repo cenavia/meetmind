@@ -1,5 +1,6 @@
 """Reglas de persistencia tras procesamiento (capa API)."""
 
+from src.db.models import MeetingRecord
 from src.db.repository import MeetingRepository
 
 LIMITED_PREFIX = "[Información limitada]"
@@ -23,10 +24,10 @@ def persist_graph_success(
     *,
     source_file_name: str | None,
     source_file_type: str | None,
-) -> None:
+) -> MeetingRecord:
     status = status_from_graph_result(result)
     err = (result.get("processing_errors") or "").strip() or None
-    repo.create_record(
+    return repo.create_record(
         participants=result.get("participants", ""),
         topics=result.get("topics", ""),
         actions=result.get("actions", ""),

@@ -6,6 +6,7 @@ import tempfile
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from pathlib import Path
 from typing import Annotated
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
@@ -26,7 +27,10 @@ from src.services.file_loader import FileLoaderError, load_text_file
 from src.services.transcription import TranscriptionError, transcribe_audio
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/process", tags=["process"])
+router = APIRouter(
+    prefix="/process",
+    tags=["process"],
+)
 
 MAX_TEXT_LENGTH = 50_000
 
@@ -47,24 +51,30 @@ class ProcessMeetingResponse(BaseModel):
     actions: str
     minutes: str
     executive_summary: str
+    meeting_id: UUID | None = None
 
 
-def _try_persist_success(
+def _persist_graph_success_or_503(
     repo: MeetingRepository,
     result: dict,
     *,
     source_file_name: str | None,
     source_file_type: str | None,
-) -> None:
+) -> UUID:
     try:
-        persist_graph_success(
+        row = persist_graph_success(
             repo,
             result,
             source_file_name=source_file_name,
             source_file_type=source_file_type,
         )
+        return row.id
     except Exception:
         logger.exception("No se pudo persistir el resultado de la reunión")
+        raise HTTPException(
+            status_code=503,
+            detail="No se pudo guardar el resultado en el almacenamiento. Intenta de nuevo más tarde.",
+        ) from None
 
 
 def _try_persist_failed(
@@ -85,7 +95,17 @@ def _try_persist_failed(
         logger.exception("No se pudo persistir reunión en estado fallido")
 
 
-@router.post("/text", response_model=ProcessMeetingResponse)
+@router.post(
+    "/text",
+    response_model=ProcessMeetingResponse,
+    summary="Procesar reunión desde texto",
+    description=(
+        "Envía el texto de la reunión en JSON; el procesamiento es **síncrono** hasta obtener "
+        "participantes, temas, acciones, minuta y resumen. Si la persistencia está activa, "
+        "se crea un registro y se devuelve `meeting_id`."
+    ),
+    response_description="Resultado estructurado; puede incluir `meeting_id` si el guardado en BD tuvo éxito.",
+)
 def process_text(
     body: ProcessTextRequest,
     graph=Depends(get_graph_dep),
@@ -105,7 +125,12 @@ def process_text(
         )
 
     result = graph.invoke({"raw_text": text})
-    _try_persist_success(repo, result, source_file_name=None, source_file_type=None)
+    meeting_id = _persist_graph_success_or_503(
+        repo,
+        result,
+        source_file_name=None,
+        source_file_type=None,
+    )
 
     return ProcessMeetingResponse(
         participants=result.get("participants", ""),
@@ -113,10 +138,21 @@ def process_text(
         actions=result.get("actions", ""),
         minutes=result.get("minutes", ""),
         executive_summary=result.get("executive_summary", ""),
+        meeting_id=meeting_id,
     )
 
 
-@router.post("/file", response_model=ProcessMeetingResponse)
+@router.post(
+    "/file",
+    response_model=ProcessMeetingResponse,
+    summary="Procesar reunión desde archivo",
+    description=(
+        "Sube un archivo de texto (.txt, .md) o multimedia admitido; el servidor transcribe si aplica "
+        "y ejecuta el análisis de forma **síncrona**. Respuesta alineada a `POST /text`, incluido "
+        "`meeting_id` cuando la persistencia tiene éxito."
+    ),
+    response_description="Resultado estructurado; puede incluir `meeting_id` si el guardado en BD tuvo éxito.",
+)
 async def process_file(
     file: Annotated[
         UploadFile,
@@ -199,7 +235,7 @@ async def process_file(
             except OSError:
                 pass
 
-        _try_persist_success(
+        meeting_id = _persist_graph_success_or_503(
             repo,
             result,
             source_file_name=file.filename,
@@ -211,6 +247,7 @@ async def process_file(
             actions=result.get("actions", ""),
             minutes=result.get("minutes", ""),
             executive_summary=result.get("executive_summary", ""),
+            meeting_id=meeting_id,
         )
 
     if ext in {".txt", ".md"}:
@@ -226,7 +263,7 @@ async def process_file(
             raise HTTPException(status_code=e.status_code, detail=e.message) from e
 
         result = graph.invoke({"raw_text": text})
-        _try_persist_success(
+        meeting_id = _persist_graph_success_or_503(
             repo,
             result,
             source_file_name=file.filename,
@@ -238,6 +275,7 @@ async def process_file(
             actions=result.get("actions", ""),
             minutes=result.get("minutes", ""),
             executive_summary=result.get("executive_summary", ""),
+            meeting_id=meeting_id,
         )
 
     raise HTTPException(status_code=415, detail=MSG_FORMAT_UNSUPPORTED)
@@ -250,7 +288,11 @@ _SSE_HEADERS = {
 }
 
 
-@router.post("/file/stream")
+@router.post(
+    "/file/stream",
+    summary="Procesar archivo con progreso (SSE)",
+    description="Igual que POST /file pero devuelve Server-Sent Events con fases y resultado final o error.",
+)
 async def process_file_stream(
     file: Annotated[
         UploadFile,
@@ -264,7 +306,7 @@ async def process_file_stream(
 
     Eventos JSON en cada línea `data:`:
     - `{"type":"phase","phase":"received|transcribing|analyzing|text_loaded","message":"..."}`
-    - `{"type":"complete","data":{...}}` (mismo shape que ProcessMeetingResponse)
+    - `{"type":"complete","data":{...}}` (como ProcessMeetingResponse; puede incluir `meeting_id`)
     - `{"type":"error","status":4xx,"detail":"..."}`
     """
     content = await file.read()
@@ -277,7 +319,11 @@ async def process_file_stream(
     )
 
 
-@router.post("/text/stream")
+@router.post(
+    "/text/stream",
+    summary="Procesar texto con progreso (SSE)",
+    description="Procesamiento síncrono del grafo con eventos SSE (fase analyzing + complete o error).",
+)
 async def process_text_stream(
     body: ProcessTextRequest,
     graph=Depends(get_graph_dep),
