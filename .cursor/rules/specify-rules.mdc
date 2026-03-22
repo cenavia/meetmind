@@ -30,9 +30,9 @@ cd src [ONLY COMMANDS FOR ACTIVE TECHNOLOGIES][ONLY COMMANDS FOR ACTIVE TECHNOLO
 Python 3.11+: Follow standard conventions
 
 ## Recent Changes
+- 007-executive-summary: Added Python 3.11+ + FastAPI, Gradio, LangGraph, LangChain (langchain-core), uv
 - 006-generate-minutes: Added Python 3.11+ + FastAPI, Gradio, LangGraph, LangChain (langchain-core), uv
 - 005-extract-actions: Added Python 3.11+ + FastAPI, Gradio, LangGraph, LangChain (langchain-core), uv
-- 004-identify-topics: Added Python 3.11+ + FastAPI, Gradio, LangGraph, LangChain (langchain-core), uv
 
 
 <!-- MANUAL ADDITIONS START -->

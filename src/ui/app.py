@@ -100,6 +100,12 @@ def process_dispatch(text: str, file) -> str:
     return "Introduce texto o sube un archivo antes de procesar."
 
 
+def on_process(text: str, file) -> tuple[str, dict]:
+    """Wrapper que procesa y desactiva el botón Procesar inmediatamente (FR-005, FR-006)."""
+    result = process_dispatch(text, file)
+    return result, gr.update(interactive=False)
+
+
 def _has_file(file) -> bool:
     """Comprueba si hay archivo seleccionado."""
     if file is None:
@@ -179,10 +185,10 @@ def create_ui():
         )
 
         process_btn.click(
-            fn=process_dispatch,
+            fn=on_process,
             inputs=[text_input, file_input],
-            outputs=[output],
-            show_progress=True,  # Loader visible durante procesamiento (US-004); errores ocultan loader y muestran mensaje
+            outputs=[output, process_btn],
+            show_progress=True,  # Loader visible durante procesamiento (US-004)
         )
 
     return demo
