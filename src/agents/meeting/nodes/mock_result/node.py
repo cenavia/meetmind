@@ -4,9 +4,7 @@ from src.agents.meeting.state import MeetingState
 
 
 def mock_result_node(state: MeetingState) -> dict:
-    """Retorna datos hardcodeados para validar el flujo E2E. No sobrescribe participants, topics ni actions (extraídos por sus nodos)."""
+    """Retorna datos hardcodeados para validar el flujo E2E. No sobrescribe participants, topics, actions ni minutes (extraídos/generados por sus nodos)."""
     return {
-        "minutes": "Reunión de seguimiento. Se revisó el estado del presupuesto. "
-        "Se acordó enviar propuesta actualizada antes del viernes.",
         "executive_summary": "Acuerdo sobre presupuesto y plazos.",
     }
