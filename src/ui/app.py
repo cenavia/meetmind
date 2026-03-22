@@ -10,7 +10,11 @@ from pathlib import Path
 import gradio as gr
 import httpx
 
-from src.config import get_api_base_url, get_processing_timeout_sec, get_transcription_backend
+from src.config import (
+    get_api_base_url,
+    get_processing_timeout_sec,
+    get_transcription_backend,
+)
 from src.ui.sse_client import iter_sse_events, read_http_error_body
 from src.ui.status_loader import (
     LOADER_CSS,
@@ -60,10 +64,14 @@ def _format_result(data: dict) -> str:
     return "\n".join(lines)
 
 
-def _transcription_hint() -> str:
-    if get_transcription_backend() == "cloud":
-        return "Transcripción en la nube (OpenAI Whisper)."
-    return "Transcripción en este equipo (Whisper local); la primera vez puede descargar el modelo."
+def _event_transcription_backend(event: dict, *, is_multimedia_file: bool) -> str | None:
+    """Campo `transcription_backend` del SSE o inferencia (API antigua)."""
+    tb = event.get("transcription_backend")
+    if tb in ("cloud", "local", "none"):
+        return tb
+    if is_multimedia_file:
+        return get_transcription_backend()
+    return "none"
 
 
 def _timeout_hint_minutes() -> str:
@@ -239,11 +247,13 @@ def on_process(text: str, file):
             return
 
         is_mm = is_multimedia_path(path)
-        combined_hint = f"{_transcription_hint()} {_timeout_hint_minutes()}"
-        hint = combined_hint if is_mm else _timeout_hint_minutes()
+        hint = _timeout_hint_minutes()
+        tb_initial: str | None = get_transcription_backend() if is_mm else "none"
 
         yield (
-            gr.update(value=loader_multimedia(1, hint=hint)),
+            gr.update(
+                value=loader_multimedia(1, hint=hint, transcription_backend=tb_initial),
+            ),
             gr.update(value=""),
             done_btn,
         )
@@ -268,6 +278,7 @@ def on_process(text: str, file):
                     event.get("message"),
                     elapsed_sec=elapsed,
                     hint=hint,
+                    transcription_backend=_event_transcription_backend(event, is_multimedia_file=is_mm),
                 )
                 yield gr.update(value=panel), gr.update(value=""), done_btn
             elif et == "complete":
@@ -289,6 +300,7 @@ def on_process(text: str, file):
                     "analyzing",
                     "Enviando texto al servidor…",
                     hint=_timeout_hint_minutes(),
+                    transcription_backend="none",
                 )
             ),
             gr.update(value=""),
@@ -316,6 +328,7 @@ def on_process(text: str, file):
                     event.get("message"),
                     elapsed_sec=elapsed,
                     hint=hint_txt,
+                    transcription_backend=_event_transcription_backend(event, is_multimedia_file=False),
                 )
                 yield gr.update(value=panel), gr.update(value=""), done_btn
             elif et == "complete":
@@ -380,7 +393,8 @@ def create_ui():
                 )
         gr.Markdown(
             "*Elige uno: texto o archivo. Para cambiar de modo, pulsa Limpiar. "
-            "El estado de carga refleja las fases del servidor (transcripción y análisis).*"
+            "Durante el procesamiento verás **NUBE** o **LOCAL** según dónde corre Whisper "
+            "(configuración `TRANSCRIPTION_BACKEND` / `OPENAI_API_KEY` en el servidor).*"
         )
         status_panel = gr.HTML(value="")
         with gr.Row():

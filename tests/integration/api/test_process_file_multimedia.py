@@ -61,3 +61,4 @@ def test_process_file_stream_mp3_sse(mock_transcribe):
     assert "analyzing" in raw
     assert "complete" in raw
     assert "participants" in raw
+    assert "transcription_backend" in raw

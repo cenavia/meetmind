@@ -29,6 +29,18 @@ def get_transcription_backend() -> Literal["local", "cloud"]:
     return "cloud" if key else "local"
 
 
+def get_transcription_mode_label() -> str:
+    """
+    Texto fijo para mostrar en UI o logs: dónde se ejecuta Whisper.
+
+    - **cloud**: API OpenAI `whisper-1`
+    - **local**: paquete `openai-whisper` en la máquina que corre la API
+    """
+    if get_transcription_backend() == "cloud":
+        return "NUBE — Whisper vía OpenAI API (whisper-1)"
+    return "LOCAL — Whisper en este servidor (openai-whisper + PyTorch)"
+
+
 def get_openai_transcription_max_bytes() -> int:
     """Límite de tamaño del archivo enviado a la API de transcripción (por defecto 25 MB)."""
     val = os.getenv("OPENAI_TRANSCRIPTION_MAX_MB", "25")

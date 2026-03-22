@@ -14,17 +14,46 @@ def _escape(s: str) -> str:
     return html.escape(s, quote=True)
 
 
+def _transcription_mode_row(transcription_backend: str | None) -> str:
+    """Fila con insignia LOCAL / NUBE / sin Whisper (solo texto)."""
+    if transcription_backend == "cloud":
+        return (
+            '<div class="meetmind-mode-row">'
+            '<span class="meetmind-mode-badge meetmind-mode-cloud">NUBE</span>'
+            '<span class="meetmind-mode-desc">Transcripción con OpenAI API (whisper-1)</span>'
+            "</div>"
+        )
+    if transcription_backend == "local":
+        return (
+            '<div class="meetmind-mode-row">'
+            '<span class="meetmind-mode-badge meetmind-mode-local">LOCAL</span>'
+            '<span class="meetmind-mode-desc">Transcripción en este servidor (openai-whisper)</span>'
+            "</div>"
+        )
+    if transcription_backend == "none":
+        return (
+            '<div class="meetmind-mode-row">'
+            '<span class="meetmind-mode-badge meetmind-mode-na">SIN WHISPER</span>'
+            '<span class="meetmind-mode-desc">Solo análisis de texto; no hay paso de transcripción de audio</span>'
+            "</div>"
+        )
+    return ""
+
+
 def loader_custom(
     *,
     title: str,
     description: str,
     elapsed_sec: float = 0.0,
     hint: str = "",
+    transcription_backend: str | None = None,
 ) -> str:
     """Panel genérico de carga (barra animada + título + descripción)."""
+    mode_row = _transcription_mode_row(transcription_backend)
     extra = f'<p class="meetmind-loader-hint">{_escape(hint)}</p>' if hint else ""
     elapsed = f'<p class="meetmind-loader-elapsed">Tiempo transcurrido: {int(elapsed_sec)} s</p>'
     return f"""<div class="meetmind-loader">
+  {mode_row}
   <div class="meetmind-loader-bar"></div>
   <p class="meetmind-loader-title">{_escape(title)}</p>
   <p class="meetmind-loader-desc">{_escape(description)}</p>
@@ -48,14 +77,27 @@ def loader_from_api_phase(
     *,
     elapsed_sec: float = 0.0,
     hint: str = "",
+    transcription_backend: str | None = None,
 ) -> str:
     """Construye el HTML del loader a partir de un evento `phase` del servidor."""
     title, default_desc = _API_PHASE_DEFAULTS.get(phase, ("Procesando", "En curso…"))
     desc = message if message else default_desc
-    return loader_custom(title=title, description=desc, elapsed_sec=elapsed_sec, hint=hint)
+    return loader_custom(
+        title=title,
+        description=desc,
+        elapsed_sec=elapsed_sec,
+        hint=hint,
+        transcription_backend=transcription_backend,
+    )
 
 
-def loader_multimedia(phase: int, *, elapsed_sec: float = 0.0, hint: str = "") -> str:
+def loader_multimedia(
+    phase: int,
+    *,
+    elapsed_sec: float = 0.0,
+    hint: str = "",
+    transcription_backend: str | None = None,
+) -> str:
     """
     Panel de estado para archivo multimedia.
 
@@ -72,7 +114,13 @@ def loader_multimedia(phase: int, *, elapsed_sec: float = 0.0, hint: str = "") -
         ("Análisis", "Extrayendo participantes, temas, acciones, minuta y resumen ejecutivo…"),
     ]
     title, desc = phases[max(0, min(phase, len(phases) - 1))]
-    return loader_custom(title=title, description=desc, elapsed_sec=elapsed_sec, hint=hint)
+    return loader_custom(
+        title=title,
+        description=desc,
+        elapsed_sec=elapsed_sec,
+        hint=hint,
+        transcription_backend=transcription_backend,
+    )
 
 
 def loader_text(*, phase: int = 0, elapsed_sec: float = 0.0) -> str:
@@ -81,7 +129,13 @@ def loader_text(*, phase: int = 0, elapsed_sec: float = 0.0) -> str:
         desc = "Enviando texto al servidor…"
     else:
         desc = "Analizando la reunión (participantes, temas, minuta, resumen)…"
-    return loader_custom(title="Análisis", description=desc, elapsed_sec=elapsed_sec, hint="")
+    return loader_custom(
+        title="Análisis",
+        description=desc,
+        elapsed_sec=elapsed_sec,
+        hint="",
+        transcription_backend="none",
+    )
 
 
 def multimedia_phase_from_elapsed(elapsed_sec: float) -> int:
@@ -101,6 +155,28 @@ def multimedia_phase_from_elapsed(elapsed_sec: float) -> int:
 
 # CSS inyectado en gr.Blocks(css=...)
 LOADER_CSS = """
+.meetmind-mode-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.65rem;
+}
+.meetmind-mode-badge {
+  display: inline-block;
+  padding: 0.2rem 0.55rem;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+.meetmind-mode-desc {
+  font-size: 0.82rem;
+  color: var(--body-text-color-subdued, #6b7280);
+}
+.meetmind-mode-cloud { background: #dbeafe; color: #1d4ed8; }
+.meetmind-mode-local { background: #d1fae5; color: #047857; }
+.meetmind-mode-na { background: #e5e7eb; color: #4b5563; }
 .meetmind-loader {
   border: 1px solid var(--border-color-primary, #e5e7eb);
   border-radius: 8px;

@@ -9,6 +9,7 @@ Health check:
 """
 
 import logging
+from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
 
@@ -23,11 +24,22 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.api.routers import health, process
+from src.config import get_transcription_mode_label
+
+logger = logging.getLogger("meetmind.api")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("Transcripción multimedia: %s", get_transcription_mode_label())
+    yield
+
 
 app = FastAPI(
     title="MeetMind API",
     description="Sistema de procesamiento de reuniones con IA",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(

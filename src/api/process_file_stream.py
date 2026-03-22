@@ -20,7 +20,7 @@ from src.api.multimedia_validation import (
     is_multimedia_extension,
     validate_multimedia_file,
 )
-from src.config import get_processing_timeout_sec
+from src.config import get_processing_timeout_sec, get_transcription_backend
 from src.services.file_loader import FileLoaderError, load_text_file
 from src.services.transcription import TranscriptionError, transcribe_audio
 
@@ -65,6 +65,7 @@ async def stream_process_uploaded_file(
         return max(1.0, deadline - time.monotonic())
 
     if is_multimedia_extension(ext):
+        whisper_mode = get_transcription_backend()
         err = validate_multimedia_file(ext, ct, len(content))
         if err:
             code = 400 if ("supera" in err or "límite" in err) else 415
@@ -76,6 +77,7 @@ async def stream_process_uploaded_file(
                 "type": "phase",
                 "phase": "received",
                 "message": "Archivo recibido en el servidor; preparando transcripción.",
+                "transcription_backend": whisper_mode,
             }
         )
 
@@ -97,7 +99,12 @@ async def stream_process_uploaded_file(
                 {
                     "type": "phase",
                     "phase": "transcribing",
-                    "message": "Transcripción con Whisper en curso…",
+                    "message": (
+                        "Transcripción con Whisper en la nube (OpenAI)…"
+                        if whisper_mode == "cloud"
+                        else "Transcripción con Whisper local en el servidor…"
+                    ),
+                    "transcription_backend": whisper_mode,
                 }
             )
             try:
@@ -125,6 +132,7 @@ async def stream_process_uploaded_file(
                     "type": "phase",
                     "phase": "analyzing",
                     "message": "Analizando la reunión (participantes, temas, minuta, resumen)…",
+                    "transcription_backend": whisper_mode,
                 }
             )
 
@@ -167,6 +175,7 @@ async def stream_process_uploaded_file(
                 "type": "phase",
                 "phase": "received",
                 "message": "Archivo de texto recibido.",
+                "transcription_backend": "none",
             }
         )
 
@@ -181,6 +190,7 @@ async def stream_process_uploaded_file(
                 "type": "phase",
                 "phase": "text_loaded",
                 "message": "Texto extraído; iniciando análisis con IA.",
+                "transcription_backend": "none",
             }
         )
 
@@ -241,6 +251,7 @@ async def stream_process_text_request(raw_text: str, graph: Any) -> AsyncIterato
             "type": "phase",
             "phase": "analyzing",
             "message": "Analizando la reunión con IA…",
+            "transcription_backend": "none",
         }
     )
 
