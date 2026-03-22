@@ -12,7 +12,12 @@ pinned: false
 
 ## a. Descripción general del proyecto
 
+
 MeetMind es un sistema que **procesa notas y grabaciones de reuniones** y devuelve un resultado estructurado con ayuda de un grafo de agentes (LangGraph): participantes, temas, acciones, minuta y resumen ejecutivo. Incluye una **API REST** (FastAPI) que orquesta el flujo, **persistencia** de reuniones en base de datos (SQLite por defecto), **transcripción** de audio y vídeo (Whisper vía OpenAI o modelo local) y una **interfaz web** (Gradio) que consume la API. El diseño contempla estados de proceso, avisos y errores parciales para dar **feedback claro** cuando el análisis es incompleto o falla una parte del pipeline.
+
+## Slide presentacion del proyecto
+
+📽️ [Slides de presentación](https://docs.google.com/presentation/d/e/2PACX-1vQeTvZhFJ5x4syidOxi0tQq0VoMEb6eQ6hkPz-hpoSobO5_GkTTWm7V0R3XDhJGlA/pub?start=true&loop=true&delayms=3000)
 
 ## b. Stack tecnológico utilizado
 
@@ -89,7 +94,8 @@ docker run -p 7860:7860 --env-file .env meetmind:hf
 
 ### Documentación ampliada
 
-Instrucciones detalladas, ejemplos con `curl` y tabla de variables de entorno: [docs/planning/COMO-EJECUTAR.md](docs/planning/COMO-EJECUTAR.md).
+- Instrucciones detalladas, ejemplos con `curl` y tabla de variables de entorno: [docs/planning/COMO-EJECUTAR.md](docs/planning/COMO-EJECUTAR.md)
+- [Slides de presentación](https://docs.google.com/presentation/d/e/2PACX-1vQeTvZhFJ5x4syidOxi0tQq0VoMEb6eQ6hkPz-hpoSobO5_GkTTWm7V0R3XDhJGlA/pub?start=true&loop=true&delayms=3000) (Google Slides)
 
 ## d. Estructura del proyecto
 
