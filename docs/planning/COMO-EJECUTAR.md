@@ -72,14 +72,27 @@ print(result)
 2. Levantar la UI: `uv run gradio src/ui/app.py`
 3. En la UI: escribir texto en el input → pulsar **Procesar** → ver resultado estructurado (participantes, temas, acciones, minuta, resumen)
 
+### 4.1. Flujo con archivo (TXT o Markdown)
+
+- En la misma pantalla: área de texto **o** selector de archivo (.txt, .md)
+- Subir archivo: arrastrar o seleccionar → pulsar **Procesar** → ver resultado
+- Para cambiar de modo (texto ↔ archivo): pulsar **Limpiar**
+
 ---
 
 ## 5. Probar la API directamente
 
+**Texto:**
 ```bash
 curl -X POST http://localhost:8000/api/v1/process/text \
   -H "Content-Type: application/json" \
   -d '{"text": "Reunión de prueba con Juan y María."}'
+```
+
+**Archivo (.txt o .md):**
+```bash
+curl -X POST http://localhost:8000/api/v1/process/file \
+  -F "file=@notas_reunion.txt"
 ```
 
 ---
@@ -108,4 +121,4 @@ cp .env.example .env
 
 ---
 
-*Actualizado según implementación del Hello World E2E (US-000).*
+*Actualizado según implementación del Hello World E2E (US-000) y procesamiento de archivos TXT/MD (US-002).*
