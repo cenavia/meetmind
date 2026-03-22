@@ -6,6 +6,25 @@ import gradio as gr
 import httpx
 
 from src.config import get_api_base_url
+from src.ui.utils import get_mime_for_extension, validate_file
+
+
+def _format_http_error(e: httpx.HTTPStatusError) -> str:
+    """Formatea error HTTP con mensaje amigable, sin exponer detalles técnicos."""
+    try:
+        body = e.response.json()
+        if isinstance(body, dict) and "detail" in body:
+            detail = body["detail"]
+            if isinstance(detail, str):
+                return detail
+            if isinstance(detail, list) and detail:
+                first = detail[0]
+                if isinstance(first, dict) and "msg" in first:
+                    return first["msg"]
+                return str(first)
+    except Exception:
+        pass
+    return "Ha ocurrido un error con el servicio. Intenta de nuevo más tarde."
 
 
 def _format_result(data: dict) -> str:
@@ -38,18 +57,18 @@ def process_meeting_text(text: str) -> str:
     endpoint = f"{api_url.rstrip('/')}/api/v1/process/text"
 
     try:
-        with httpx.Client(timeout=30.0) as client:
+        with httpx.Client(timeout=600.0) as client:
             response = client.post(endpoint, json={"text": text.strip()})
             response.raise_for_status()
             data = response.json()
     except httpx.ConnectError:
-        return "Error: No se puede conectar con la API. Verifica que esté ejecutándose en la URL configurada."
+        return "No se puede conectar con la API. Verifica que esté ejecutándose en la URL configurada."
     except httpx.TimeoutException:
-        return "Error: La API tardó demasiado en responder."
+        return "El procesamiento tardó demasiado. Intenta de nuevo o usa un archivo más corto."
     except httpx.HTTPStatusError as e:
-        return f"Error {e.response.status_code}: {e.response.text}"
-    except Exception as e:
-        return f"Error inesperado: {e}"
+        return _format_http_error(e)
+    except Exception:
+        return "Ha ocurrido un error. Intenta de nuevo."
 
     return _format_result(data)
 
@@ -57,34 +76,35 @@ def process_meeting_text(text: str) -> str:
 def process_meeting_file(file) -> str:
     """Llama a la API para procesar archivo y devuelve el resultado formateado."""
     if file is None:
-        return "Selecciona un archivo .txt o .md antes de procesar."
+        return "Selecciona un archivo antes de procesar."
 
     path = file if isinstance(file, (str, Path)) else (file[0] if isinstance(file, (list, tuple)) else None)
     if not path or not Path(path).exists():
         return "Archivo no encontrado. Selecciona un archivo válido."
 
+    err = validate_file(path)
+    if err:
+        return err
+
     api_url = get_api_base_url()
     endpoint = f"{api_url.rstrip('/')}/api/v1/process/file"
+    mime = get_mime_for_extension(Path(path).name)
 
     try:
         with open(path, "rb") as f:
-            files = {"file": (Path(path).name, f, "text/plain" if path.endswith(".txt") else "text/markdown")}
-            with httpx.Client(timeout=30.0) as client:
+            files = {"file": (Path(path).name, f, mime)}
+            with httpx.Client(timeout=600.0) as client:
                 response = client.post(endpoint, files=files)
                 response.raise_for_status()
                 data = response.json()
     except httpx.ConnectError:
-        return "Error: No se puede conectar con la API. Verifica que esté ejecutándose en la URL configurada."
+        return "No se puede conectar con la API. Verifica que esté ejecutándose en la URL configurada."
     except httpx.TimeoutException:
-        return "Error: La API tardó demasiado en responder."
+        return "El procesamiento tardó demasiado. Intenta de nuevo o usa un archivo más corto."
     except httpx.HTTPStatusError as e:
-        try:
-            detail = e.response.json().get("detail", e.response.text)
-        except Exception:
-            detail = e.response.text
-        return f"Error {e.response.status_code}: {detail}"
-    except Exception as e:
-        return f"Error inesperado: {e}"
+        return _format_http_error(e)
+    except Exception:
+        return "Ha ocurrido un error. Intenta de nuevo."
 
     return _format_result(data)
 
@@ -143,8 +163,8 @@ def create_ui():
                     lines=5,
                 )
                 file_input = gr.File(
-                    label="O sube un archivo (.txt o .md)",
-                    file_types=[".txt", ".md"],
+                    label="O sube un archivo (TXT, MD, MP4, MOV, MP3, WAV, M4A)",
+                    file_types=[".txt", ".md", ".mp4", ".mov", ".mp3", ".wav", ".m4a"],
                     type="filepath",
                 )
         gr.Markdown("*Elige uno: texto o archivo. Para cambiar de modo, pulsa Limpiar.*")

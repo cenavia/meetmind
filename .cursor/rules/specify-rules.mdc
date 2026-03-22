@@ -6,11 +6,15 @@ alwaysApply: true
 
 # meetmind Development Guidelines
 
-Auto-generated from all feature plans. Last updated: 2026-03-21
+Auto-generated from all feature plans. Last updated: 2026-03-22
 
 ## Active Technologies
 - N/A (no persistencia de archivos; se procesan en memoria) (002-text-notes-processing)
 - N/A (sin persistencia para esta feature) (003-participants-extraction)
+- Python 3.11+ + Gradio, httpx, FastAPI (API consumida) (008-web-file-upload)
+- N/A (archivos procesados en memoria; la UI no persiste) (008-web-file-upload)
+- Python 3.11+ + FastAPI, LangGraph, LangChain, OpenAI Audio API (whisper-1) u openai-whisper local, ffmpeg (sistema), pydub (opcional) (009-multimedia-recording)
+- SQLModel/DB para jobs asíncronos (cuando supera timeout); transcripciones en memoria para flujo síncrono (009-multimedia-recording)
 
 - Python 3.11+ + FastAPI, Gradio, LangGraph, LangChain (langchain-core), uv (gestor) (001-hello-world-e2e)
 
@@ -30,9 +34,9 @@ cd src [ONLY COMMANDS FOR ACTIVE TECHNOLOGIES][ONLY COMMANDS FOR ACTIVE TECHNOLO
 Python 3.11+: Follow standard conventions
 
 ## Recent Changes
+- 009-multimedia-recording: OpenAI whisper-1 (cloud) u openai-whisper local; ffmpeg (sistema)
+- 008-web-file-upload: Added Python 3.11+ + Gradio, httpx, FastAPI (API consumida)
 - 007-executive-summary: Added Python 3.11+ + FastAPI, Gradio, LangGraph, LangChain (langchain-core), uv
-- 006-generate-minutes: Added Python 3.11+ + FastAPI, Gradio, LangGraph, LangChain (langchain-core), uv
-- 005-extract-actions: Added Python 3.11+ + FastAPI, Gradio, LangGraph, LangChain (langchain-core), uv
 
 
 <!-- MANUAL ADDITIONS START -->
