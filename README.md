@@ -1,3 +1,13 @@
+---
+title: Meetmind
+emoji: 🎙️
+colorFrom: indigo
+colorTo: purple
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # MeetMind
 
 ## a. Descripción general del proyecto
@@ -68,6 +78,13 @@ Desde la raíz del repositorio:
 
 ```bash
 uv run pytest
+```
+### via docker
+```bash
+cd meetmind
+cp .env.example .env   # ajustar variables según necesidad
+docker build -t meetmind:hf .
+docker run -p 7860:7860 --env-file .env meetmind:hf
 ```
 
 ### Documentación ampliada

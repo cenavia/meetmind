@@ -1,7 +1,13 @@
 """Configuración del proyecto MeetMind."""
 
+import logging
 import os
+from pathlib import Path
 from typing import Literal
+
+from sqlalchemy.engine.url import make_url
+
+logger = logging.getLogger(__name__)
 
 
 def get_api_base_url() -> str:
@@ -9,12 +15,47 @@ def get_api_base_url() -> str:
     return os.getenv("API_BASE_URL", "http://localhost:8000")
 
 
+def _sqlite_url_with_writable_parent(url: str) -> str:
+    """
+    Crea el directorio padre del fichero SQLite si falta.
+
+    Si la ruta no es usable (p. ej. ``DATABASE_URL`` apunta a un path del host
+    dentro de Docker), usa ``/tmp/meetmind.db`` para evitar
+    ``unable to open database file``.
+    """
+    if not url.startswith("sqlite"):
+        return url
+    try:
+        parsed = make_url(url)
+    except Exception:
+        return url
+    db = parsed.database
+    if not db or db == ":memory:":
+        return url
+    path = Path(db)
+    if not path.is_absolute():
+        path = (Path.cwd() / path).resolve()
+    else:
+        path = path.resolve()
+    parent = path.parent
+    try:
+        parent.mkdir(parents=True, exist_ok=True)
+        return url
+    except OSError as e:
+        logger.warning(
+            "SQLite: no se puede usar el directorio %s (%s); fallback a /tmp/meetmind.db",
+            parent,
+            e,
+        )
+        return "sqlite:////tmp/meetmind.db"
+
+
 def get_database_url() -> str:
     """URL SQLAlchemy para persistencia (SQLite por defecto en el directorio de trabajo)."""
     raw = os.getenv("DATABASE_URL", "").strip()
     if raw:
-        return raw
-    return "sqlite:///./meetmind.db"
+        return _sqlite_url_with_writable_parent(raw)
+    return _sqlite_url_with_writable_parent("sqlite:///./meetmind.db")
 
 
 # Modelos Whisper válidos (multilingües; sin sufijo .en para español/reuniones mixtas)

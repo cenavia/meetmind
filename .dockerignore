@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.venv/
+venv/
+*.egg-info/
+*.egg
+dist/
+build/
+
+# uv
+.uv/
+
+# Env (secrets van en HF Settings)
+.env
+.env.*
+
+# Base de datos local (ephemeral en Spaces)
+meetmind.db
+
+# IDE, OS
+.idea/
+.vscode/
+.git/
+.gitignore
+.DS_Store
+
+# Tests y docs (no necesarios en runtime)
+tests/
+*.md
+!README.md
