@@ -14,13 +14,8 @@
 ## Instalación
 
 ```bash
-# Clonar el repositorio (si aplica)
 cd meetmind
-
-# Instalar dependencias con uv (crea .venv automáticamente si no existe)
 uv sync
-# o en modo editable:
-uv pip install -e .
 ```
 
 ---
@@ -36,21 +31,25 @@ uv run uvicorn src.api.main:app --reload --host 0.0.0.0 --port 8000
 - **Health check:**
   ```bash
   curl http://localhost:8000/health
+  # {"status":"ok"}
   ```
 
 ---
 
 ## 2. Ejecutar la UI (Gradio)
 
+En otra terminal:
+
 ```bash
+# URL por defecto (localhost:8000)
 uv run gradio src/ui/app.py
-# o:
-uv run python -m gradio src/ui/app.py
+
+# O con API en otra URL:
+API_BASE_URL=http://localhost:8000 uv run gradio src/ui/app.py
 ```
 
 - La UI se abrirá en el navegador (por defecto http://localhost:7860)
-- En modo demo, la UI puede invocar el grafo directamente
-- Para conectar a la API: configurar `API_BASE_URL=http://localhost:8000` si la UI usa httpx
+- La UI invoca la API por HTTP usando `API_BASE_URL`
 
 ---
 
@@ -69,13 +68,36 @@ print(result)
 
 ## 4. Flujo end-to-end (Hello World)
 
-1. Levantar la API: `uv run uvicorn src.api.main:app --reload --port 8000`
+1. Levantar la API: `uv run uvicorn src.api.main:app --reload --host 0.0.0.0 --port 8000`
 2. Levantar la UI: `uv run gradio src/ui/app.py`
-3. En la UI: escribir texto en el input → pulsar "Procesar" → ver resultado en la salida
+3. En la UI: escribir texto en el input → pulsar **Procesar** → ver resultado estructurado (participantes, temas, acciones, minuta, resumen)
+
+### 4.1. Flujo con archivo (TXT o Markdown)
+
+- En la misma pantalla: área de texto **o** selector de archivo (.txt, .md)
+- Subir archivo: arrastrar o seleccionar → pulsar **Procesar** → ver resultado
+- Para cambiar de modo (texto ↔ archivo): pulsar **Limpiar**
 
 ---
 
-## Variables de entorno (opcional)
+## 5. Probar la API directamente
+
+**Texto:**
+```bash
+curl -X POST http://localhost:8000/api/v1/process/text \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Reunión de prueba con Juan y María."}'
+```
+
+**Archivo (.txt o .md):**
+```bash
+curl -X POST http://localhost:8000/api/v1/process/file \
+  -F "file=@notas_reunion.txt"
+```
+
+---
+
+## Variables de entorno
 
 Crear `.env` a partir de `.env.example`:
 
@@ -83,11 +105,26 @@ Crear `.env` a partir de `.env.example`:
 cp .env.example .env
 ```
 
-Variables típicas:
+| Variable       | Default              | Descripción                          |
+|----------------|----------------------|--------------------------------------|
+| API_BASE_URL   | http://localhost:8000| URL base de la API (usado por la UI) |
+| OPENAI_API_KEY | —                    | No requerido en Hello World (modo mock) |
+| DATABASE_URL   | sqlite:///./meetmind.db | SQLite en el directorio de trabajo de la API; persistencia de reuniones procesadas (GET `/api/v1/meetings`) |
 
-- `OPENAI_API_KEY` — Para modelos OpenAI (extracción, generación)
-- `DATABASE_URL` — Para persistencia (SQLite por defecto: `sqlite:///./meetmind.db`)
+**Historial persistido (tras procesar texto o archivo):**
+
+```bash
+curl -s http://localhost:8000/api/v1/meetings
+```
 
 ---
 
-*Actualizar este documento según la implementación real del proyecto.*
+## Solución de problemas
+
+- **La UI no conecta con la API**: Comprobar que la API está en marcha y que `API_BASE_URL` apunta al host/puerto correctos.
+- **ModuleNotFoundError**: Ejecutar `uv sync` de nuevo.
+- **Puerto en uso**: Cambiar `--port` en uvicorn o la configuración de Gradio.
+
+---
+
+*Actualizado según implementación del Hello World E2E (US-000) y procesamiento de archivos TXT/MD (US-002).*

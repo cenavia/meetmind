@@ -26,6 +26,11 @@
       "sourceType": "github",
       "computedHash": "0be39cf8d1f315eb2fbb96850312b1a7a6a9d15d38e9bce3a17a1620572b3198"
     },
+    "frontend-design": {
+      "source": "anthropics/skills",
+      "sourceType": "github",
+      "computedHash": "063a0e6448123cd359ad0044cc46b0e490cc7964d45ef4bb9fd842bd2ffbca67"
+    },
     "gradio": {
       "source": "huggingface/skills",
       "sourceType": "github",

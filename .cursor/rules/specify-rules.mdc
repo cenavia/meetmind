@@ -1,0 +1,49 @@
+---
+description: Project Development Guidelines
+globs: ["**/*"]
+alwaysApply: true
+---
+
+# meetmind Development Guidelines
+
+Auto-generated from all feature plans. Last updated: 2026-03-22
+
+## Active Technologies
+- N/A (no persistencia de archivos; se procesan en memoria) (002-text-notes-processing)
+- N/A (sin persistencia para esta feature) (003-participants-extraction)
+- Python 3.11+ + Gradio, httpx, FastAPI (API consumida) (008-web-file-upload)
+- N/A (archivos procesados en memoria; la UI no persiste) (008-web-file-upload)
+- Python 3.11+ + FastAPI, LangGraph, LangChain, OpenAI Audio API (whisper-1) u openai-whisper local, ffmpeg (sistema), pydub (opcional) (009-multimedia-recording)
+- SQLModel/DB para jobs asíncronos (cuando supera timeout); transcripciones en memoria para flujo síncrono (009-multimedia-recording)
+- Python 3.11+ + FastAPI, SQLModel, SQLAlchemy 2.x, LangGraph (sin cambio de forma del grafo obligatorio), Pydantic v2 (011-persist-meeting-records)
+- SQLite (`sqlite:///./meetmind.db` por defecto si `DATABASE_URL` no está definida) o PostgreSQL/MySQL según URL estándar SQLAlchemy (011-persist-meeting-records)
+- Python 3.11+ + FastAPI, Pydantic v2, SQLModel/SQLAlchemy 2.x, LangGraph (invocado solo desde la capa API) (012-meetings-rest-api)
+- SQLite por defecto / URL SQLAlchemy (`DATABASE_URL`) — mismo modelo `MeetingRecord` que 011 (012-meetings-rest-api)
+- Python 3.11+ + FastAPI, Pydantic v2, LangGraph/LangChain, Gradio, SQLModel/SQLAlchemy 2.x, httpx (UI → API) (013-incomplete-error-feedback)
+- SQLite por defecto (`MeetingRecord.processing_errors` como `Text`; serialización acordada en [data-model.md](./data-model.md)) (013-incomplete-error-feedback)
+
+- Python 3.11+ + FastAPI, Gradio, LangGraph, LangChain (langchain-core), uv (gestor) (001-hello-world-e2e)
+
+## Project Structure
+
+```text
+src/
+tests/
+```
+
+## Commands
+
+cd src [ONLY COMMANDS FOR ACTIVE TECHNOLOGIES][ONLY COMMANDS FOR ACTIVE TECHNOLOGIES] pytest [ONLY COMMANDS FOR ACTIVE TECHNOLOGIES][ONLY COMMANDS FOR ACTIVE TECHNOLOGIES] ruff check .
+
+## Code Style
+
+Python 3.11+: Follow standard conventions
+
+## Recent Changes
+- 013-incomplete-error-feedback: Added Python 3.11+ + FastAPI, Pydantic v2, LangGraph/LangChain, Gradio, SQLModel/SQLAlchemy 2.x, httpx (UI → API)
+- 012-meetings-rest-api: Added Python 3.11+ + FastAPI, Pydantic v2, SQLModel/SQLAlchemy 2.x, LangGraph (invocado solo desde la capa API)
+- 011-persist-meeting-records: Added Python 3.11+ + FastAPI, SQLModel, SQLAlchemy 2.x, LangGraph (sin cambio de forma del grafo obligatorio), Pydantic v2
+
+
+<!-- MANUAL ADDITIONS START -->
+<!-- MANUAL ADDITIONS END -->
