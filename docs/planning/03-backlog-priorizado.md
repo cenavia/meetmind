@@ -8,6 +8,7 @@
 
 | User Story | Impacto Usuario/Negocio | Urgencia | Complejidad | Riesgos/Dependencias | Prioridad |
 |------------|-------------------------|----------|-------------|----------------------|-----------|
+| US-000 | Alto | Alta | Media | Base de todo el proyecto | **P0** |
 | US-003 | Alto | Alta | Media | Base del workflow | **P1** |
 | US-004 | Alto | Alta | Media | Base del workflow | **P1** |
 | US-005 | Alto | Alta | Media | Base del workflow | **P1** |
@@ -34,6 +35,10 @@
 
 ## Orden Sugerido de Implementación (MVP)
 
+### Fase 0: Estructura Inicial (P0)
+
+0. **US-000** — Estructura del proyecto + Hello World end-to-end (API, Grafo mínimo, Gradio, COMO-EJECUTAR.md)
+
 ### Fase 1: Workflow Core (P1)
 
 1. **US-012** — Persistencia (permite guardar resultados)
@@ -58,7 +63,10 @@
 
 ```mermaid
 graph TD
-    US012[US-012 Persistencia] --> US009[US-009 Historial]
+    US000[US-000 Estructura + Hello World] --> US012[US-012 Persistencia]
+    US000 --> US002[US-002 Procesar texto]
+    US000 --> US010[US-010 API]
+    US012 --> US009[US-009 Historial]
     US002[US-002 Procesar texto] --> US003[US-003 Participantes]
     US002 --> US004[US-004 Temas]
     US002 --> US005[US-005 Acciones]
@@ -80,5 +88,6 @@ graph TD
 
 | Prioridad | User Stories | Enfoque |
 |-----------|--------------|---------|
+| **P0** | 1 | Estructura inicial, Hello World E2E, instrucciones de ejecución |
 | **P1** | 7 | Workflow completo con texto + persistencia; valor core |
 | **P2** | 5 | API, multimedia, UI, historial, robustez |
