@@ -139,7 +139,10 @@ async def stream_process_uploaded_file(
                     "message": (
                         "Transcripción con Whisper en la nube (OpenAI)…"
                         if whisper_mode == "cloud"
-                        else "Transcripción con Whisper local en el servidor…"
+                        else (
+                            "Transcripción con Whisper local (CPU): la primera vez se descarga el modelo (~461 MB); "
+                            "luego puede tardar mucho más que la duración del audio. No cierres la ventana."
+                        )
                     ),
                     "transcription_backend": whisper_mode,
                 }

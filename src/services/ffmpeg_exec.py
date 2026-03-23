@@ -48,18 +48,42 @@ def resolve_ffmpeg_executable() -> str | None:
     return None
 
 
+def _ensure_ffmpeg_in_path(exe: str) -> str:
+    """
+    Si el binario no se llama "ffmpeg", crea un symlink en /tmp para que subprocess lo encuentre.
+
+    imageio-ffmpeg proporciona binarios como ffmpeg-linux-aarch64-v7.0.2; Whisper invoca ``ffmpeg``.
+    """
+    exe_path = Path(exe).resolve()
+    if exe_path.name == "ffmpeg":
+        return str(exe_path.parent)
+
+    link_dir = Path("/tmp/meetmind-ffmpeg-bin")
+    link_path = link_dir / "ffmpeg"
+    try:
+        link_dir.mkdir(parents=True, exist_ok=True)
+        if not link_path.exists() or link_path.resolve() != exe_path:
+            if link_path.exists():
+                link_path.unlink()
+            link_path.symlink_to(exe_path)
+    except OSError as e:
+        logger.warning("No se pudo crear symlink ffmpeg: %s; fallback a directorio original", e)
+        return str(exe_path.parent)
+    return str(link_dir)
+
+
 def prepend_ffmpeg_to_os_path() -> None:
     """
-    Si solo existe el ffmpeg de imageio-ffmpeg, añade su carpeta al PATH del proceso.
+    Si solo existe el ffmpeg de imageio-ffmpeg, asegura que "ffmpeg" esté en PATH.
 
-    Whisper/openai-whisper a veces invoca `ffmpeg` por nombre; así lo encuentran sin brew/apt.
+    Whisper invoca ``ffmpeg`` por nombre; imageio-ffmpeg usa nombres como ffmpeg-linux-aarch64-*.
     """
     if shutil.which("ffmpeg"):
         return
     exe = resolve_ffmpeg_executable()
     if not exe:
         return
-    bin_dir = str(Path(exe).resolve().parent)
+    bin_dir = _ensure_ffmpeg_in_path(exe)
     path = os.environ.get("PATH", "")
     if bin_dir in path.split(os.pathsep):
         return
