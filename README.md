@@ -92,6 +92,8 @@ docker build -t meetmind:hf .
 docker run -p 7860:7860 --env-file .env meetmind:hf
 ```
 
+**Rendimiento (Whisper local en CPU):** la imagen precarga el modelo en el `docker build` (por defecto `small`) y el entrypoint fija `OMP_NUM_THREADS` al número de CPUs del contenedor. Para **menor latencia en CPU** (algo menos de calidad): `docker build --build-arg WHISPER_DOCKER_MODEL=base -t meetmind:hf .` y alinear `TRANSCRIPTION_MODEL=base` en `.env`. Para archivos grandes sin GPU, suele ser más rápido `TRANSCRIPTION_BACKEND=cloud` (límite ~25 MB).
+
 ### Documentación ampliada
 
 - Instrucciones detalladas, ejemplos con `curl` y tabla de variables de entorno: [docs/planning/COMO-EJECUTAR.md](docs/planning/COMO-EJECUTAR.md)

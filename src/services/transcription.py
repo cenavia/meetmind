@@ -13,6 +13,7 @@ import logging
 import os
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -35,6 +36,31 @@ class TranscriptionError(Exception):
 
 _whisper_model = None
 _whisper_loaded_key: str | None = None
+_torch_threads_configured = False
+
+
+def _apply_torch_cpu_threads_once() -> None:
+    """Alinea hilos de PyTorch con OMP_NUM_THREADS / TORCH_NUM_THREADS (mejor en Docker multi-core)."""
+    global _torch_threads_configured
+    if _torch_threads_configured:
+        return
+    _torch_threads_configured = True
+    raw = (os.getenv("TORCH_NUM_THREADS") or os.getenv("OMP_NUM_THREADS") or "").strip()
+    if not raw:
+        return
+    try:
+        import torch
+
+        n = max(1, int(raw))
+        inter = max(1, min(n, n // 2 or 1))
+        try:
+            torch.set_num_interop_threads(inter)
+        except RuntimeError:
+            pass
+        torch.set_num_threads(n)
+        logger.debug("PyTorch CPU threads: inter=%s intra=%s (TORCH/OMP)", inter, n)
+    except (ValueError, ImportError):
+        pass
 
 
 def _resolve_torch_device() -> str:
@@ -71,8 +97,19 @@ def _get_model():
     cache_key = f"{model_name}:{device}"
 
     if _whisper_model is None or _whisper_loaded_key != cache_key:
+        _apply_torch_cpu_threads_once()
+        logger.info(
+            "Whisper local: descargando o cargando modelo '%s' en %s (la primera vez puede mostrar ~461 MB)…",
+            model_name,
+            device,
+        )
+        t0 = time.perf_counter()
         _whisper_model = whisper.load_model(model_name, device=device)
         _whisper_loaded_key = cache_key
+        logger.info(
+            "Whisper local: modelo listo en %.1f s. La transcripción en CPU puede tardar varias veces la duración del audio.",
+            time.perf_counter() - t0,
+        )
     return _whisper_model
 
 
@@ -209,12 +246,27 @@ def _transcribe_local_whisper(path: Path, *, language: str | None) -> str:
     device = _resolve_torch_device()
     use_fp16 = device == "cuda"
 
+    size_mb = path.stat().st_size / (1024 * 1024)
+    logger.info(
+        "Whisper local: transcribiendo %s (%.1f MB) en %s — puede tardar mucho sin nuevos logs hasta terminar.",
+        path.name,
+        size_mb,
+        device,
+    )
+    t0 = time.perf_counter()
     result = whisper_model.transcribe(
         str(path),
         language=lang,
         fp16=use_fp16,
     )
-    return (result.get("text") or "").strip()
+    elapsed = time.perf_counter() - t0
+    text = (result.get("text") or "").strip()
+    logger.info(
+        "Whisper local: transcripción terminada en %.1f s (%d caracteres).",
+        elapsed,
+        len(text),
+    )
+    return text
 
 
 def transcribe_audio(
@@ -268,7 +320,13 @@ def transcribe_audio(
             raise
         logger.exception("Error al transcribir %s: %s", audio_path, e)
         msg = "El formato del archivo no es compatible."
-        if "ffmpeg" in str(e).lower() or "no such file" in str(e).lower():
+        err_str = str(e).lower()
+        if "ffmpeg" in err_str:
+            msg = (
+                "No se encontró ffmpeg para decodificar el audio. "
+                "En Docker instala ffmpeg en la imagen o comprueba los logs."
+            )
+        elif "no such file" in err_str:
             msg = "No se pudo procesar el archivo. Verifica que no esté dañado."
         raise TranscriptionError(msg) from e
     finally:

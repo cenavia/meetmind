@@ -119,9 +119,33 @@ curl -s http://localhost:8000/api/v1/meetings
 
 ---
 
+## 6. Ejecutar con Docker
+
+```bash
+docker build -t meetmind:hf .
+docker run -p 7860:7860 --env-file .env meetmind:hf
+```
+
+- La API (puerto 8000) y la UI (puerto 7860) corren en el mismo contenedor.
+- Dentro del contenedor, la UI usa `API_BASE_URL=http://localhost:8000` para conectar con la API.
+- Si usas `--env-file .env` con `DATABASE_URL=sqlite:///./meetmind.db`, la imagen garantiza permisos de escritura en el directorio de trabajo.
+- Para Hugging Face Spaces (sin `.env`), la imagen usa por defecto `DATABASE_URL=sqlite:////tmp/meetmind.db`.
+
+### 6.1. Rendimiento con multimedia (Whisper local)
+
+| Técnica | Qué hace |
+|--------|-----------|
+| **Precarga en build** | Durante `docker build` se descarga el modelo indicado (por defecto `small`) y se copia a `/home/user/.cache/whisper`, evitando la descarga en el primer request. |
+| **Hilos CPU** | El entrypoint define `OMP_NUM_THREADS` (y afines) con `nproc` para usar todos los cores del contenedor. Opcional: `TORCH_NUM_THREADS` o `OMP_NUM_THREADS` en el entorno para fijar un valor. |
+| **Modelo más ligero** | `docker build --build-arg WHISPER_DOCKER_MODEL=base -t meetmind:hf .` y `TRANSCRIPTION_MODEL=base` en `.env` (más rápido en CPU, algo menos de precisión). |
+| **Nube** | `TRANSCRIPTION_BACKEND=cloud` + `OPENAI_API_KEY`: suele ser más rápido que CPU local si el archivo entra en ~25 MB. |
+
+---
+
 ## Solución de problemas
 
-- **La UI no conecta con la API**: Comprobar que la API está en marcha y que `API_BASE_URL` apunta al host/puerto correctos.
+- **La UI no conecta con la API**: Comprobar que la API está en marcha y que `API_BASE_URL` apunta al host/puerto correctos. En Docker, si ves "unable to open database file", la API no arranca; la imagen incluye correcciones para permisos y ruta por defecto.
+- **Docker “congelado” tras una barra de descarga ~461 MB**: Es normal con **Whisper local**. Primero se descarga el modelo; después la transcripción en **CPU** puede tardar **mucho más** que la duración del audio y no envía eventos hasta terminar. Revisa los logs (`Whisper local: transcribiendo…` / `transcripción terminada`). Para ir más rápido: `TRANSCRIPTION_BACKEND=cloud` y `OPENAI_API_KEY` (límite ~25 MB por archivo), o un modelo más pequeño (`TRANSCRIPTION_MODEL=tiny`).
 - **ModuleNotFoundError**: Ejecutar `uv sync` de nuevo.
 - **Puerto en uso**: Cambiar `--port` en uvicorn o la configuración de Gradio.
 
